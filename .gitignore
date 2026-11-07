@@ -1,0 +1,21 @@
+# =========================================================================
+# Autodesk Fusion Specifics
+# =========================================================================
+
+# Ignore local Fusion validation, simulation, and mesh artifacts
+/backups/
+/exports/
+/tools/
+/dist/
+
+# Ignore CAD exports you might temporarily save locally (optional but recommended)
+*.f3d
+*.f3z
+*.step
+*.stp
+*.stl
+*.obj
+
+# Ignore local environment paths or sensitive add-in settings
+Add-IN/*/.env
+*.manifest.user
