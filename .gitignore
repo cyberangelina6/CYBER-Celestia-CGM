@@ -19,3 +19,7 @@
 # Ignore local environment paths or sensitive add-in settings
 Add-IN/*/.env
 *.manifest.user
+
+# Python cache
+__pycache__/
+*.pyc

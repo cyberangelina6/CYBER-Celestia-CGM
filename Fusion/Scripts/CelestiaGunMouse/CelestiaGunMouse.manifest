@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"script",
+	"author":	"Angelina",
+	"description":	{
+		"":	"Builds the CYBER Celestia custom gun mouse starter model from concept sketch v1."
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
