@@ -11,8 +11,8 @@ HOW TO RUN
 WHAT YOU GET (one component per part of the sketch)
   Slide (cat-ear rear sight, grooves), Muzzle & Shroud (barrel, heart flange,
   front sight ring, muzzle rings), Frame & Grip (frame, readout window,
-  trigger guard, grip back piece, charm eyelet), Grip Panel, Trigger,
-  Top Button, Rear Cap (heart + grip loop) and Charm (heart padlock).
+  trigger guard, two-tone grip, charm eyelet), Trigger, Top Button,
+  Rear Cap (puffy 3D heart + grip loop) and Charm (heart padlock).
 
 EDITING
   * Thicknesses (side-to-side widths, cut depths) are live Fusion parameters:
@@ -89,19 +89,18 @@ FRAME_H = 12.0
 READOUT_X0, READOUT_X1 = 84.0, 122.0
 READOUT_Y0, READOUT_Y1 = -10.0, -2.0
 
-# Grip back piece (light pink, straight and raked)
-SPINE_REAR_TOP_X = 1.0      # rear edge where it meets y = 0
+# Grip: one shape, split into a light-pink back piece and a darker front
+# panel that sit flush and share one flat, rounded base.
+SPINE_REAR_TOP_X = 1.0      # back of the grip where it meets y = 0
 SPINE_REAR_RAKE = 28.0      # degrees from vertical
-SPINE_FRONT_TOP_X = 14.0    # front edge where it meets the frame bottom
+SPINE_FRONT_TOP_X = 14.0    # colour seam (light/dark) at the frame bottom
 SPINE_FRONT_RAKE = 24.0
-SPINE_REAR_BOTTOM_Y = -58.0
-SPINE_FRONT_BOTTOM_Y = -69.0
-
-# Grip panel (darker pink, in front of the back piece). Front edge is a
-# smooth curve through these points, top to bottom.
+# Front edge of the panel: a smooth curve through these points, top to bottom
 PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0, -63.0)]
 PANEL_TOE_MID = (29.0, -69.0)   # rounded bottom-front corner
-PANEL_BOTTOM = (22.0, -71.5)
+PANEL_BOTTOM = (22.0, -71.5)    # where the flat base starts
+GRIP_BASE_TILT_DEG = 6.0        # base rises this much toward the back
+GRIP_HEEL_R = 12.0              # rounding of the bottom-back corner
 GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
 GRIP_PIN_R = 2.2
 
@@ -112,11 +111,14 @@ GUARD_IN_REAR_X = 38.0
 GUARD_IN_FRONT_X = 66.0
 GUARD_IN_BOTTOM_Y = -32.0
 
-# Heart rear cap (doubles as a palm rest)
+# Heart rear cap: a puffy 3D heart (doubles as a palm rest)
 CAP_CENTER = (-8.0, 18.0)   # midway between the two lobe centres
 CAP_HEART_W = 58.0          # lobe-to-lobe width before tilting
 CAP_TILT_DEG = 40.0         # tilts the tip forward/down into the slide
-INSET_SCALE = 0.68          # cream inner heart size (cap and flange)
+CAP_DEPTH = 30.0            # thickness at the fullest part of the lobes
+CAP_INSET_SCALE = 0.85      # size of the cream heart inside the cap
+CAP_INSET_PROUD = 2.0       # how far the cream centre bulges out of each side
+INSET_SCALE = 0.68          # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
@@ -134,23 +136,19 @@ CHARM_W = 19.0
 # Fillet radii (if a fillet fails, the script skips it and tells you)
 FILLET_SLIDE = 2.0
 FILLET_FRAME = 1.5
-FILLET_SPINE = 4.0
-FILLET_PANEL = 5.0
+FILLET_GRIP = 5.0
 FILLET_GUARD = 2.0
-FILLET_CAP = 5.0
 FILLET_SMALL = 1.0
 
 # Live parameters: (name, value in mm, comment). Shown in Change Parameters.
 LIVE_PARAMS = [
     ('slide_width', 28.0, 'Slide thickness, side to side'),
     ('frame_width', 22.0, 'Frame thickness, side to side'),
-    ('spine_width', 26.0, 'Grip back piece thickness'),
-    ('panel_width', 30.0, 'Grip panel thickness'),
+    ('grip_width', 30.0, 'Grip thickness, side to side'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
     ('button_width', 9.0, 'Top button width'),
     ('flange_width', 6.0, 'Heart flange (shroud) thickness'),
-    ('cap_width', 24.0, 'Heart rear cap thickness'),
     ('inset_proud', 1.5, 'How far the cream heart insets stand out'),
     ('loop_width', 10.0, 'Grip loop thickness'),
     ('sight_thickness', 3.0, 'Front sight ring thickness'),
@@ -378,34 +376,55 @@ def spine_front_x(y):
     return SPINE_FRONT_TOP_X + (y + FRAME_H) * math.tan(math.radians(SPINE_FRONT_RAKE))
 
 
-def spine_outline():
+def _unit(v):
+    n = math.hypot(v[0], v[1])
+    return (v[0] / n, v[1] / n)
+
+
+def round_corner(corner, a_dir, b_dir, radius):
+    """Arc of the given radius tangent to two edges leaving `corner` along
+    unit vectors a_dir and b_dir. Returns (start, mid, end) on a then b."""
+    half = math.acos(a_dir[0] * b_dir[0] + a_dir[1] * b_dir[1]) / 2.0
+    dist = radius / math.tan(half)
+    bis = _unit((a_dir[0] + b_dir[0], a_dir[1] + b_dir[1]))
+    centre_d = radius / math.sin(half)
+    t1 = (corner[0] + a_dir[0] * dist, corner[1] + a_dir[1] * dist)
+    t2 = (corner[0] + b_dir[0] * dist, corner[1] + b_dir[1] * dist)
+    mid = (corner[0] + bis[0] * (centre_d - radius), corner[1] + bis[1] * (centre_d - radius))
+    return t1, mid, t2
+
+
+def grip_heel():
+    """Rounded corner where the flat base meets the back of the grip."""
+    t = math.radians(GRIP_BASE_TILT_DEG)
+    d = (-math.cos(t), math.sin(t))                 # along the base, toward the back
+    k = math.tan(math.radians(SPINE_REAR_RAKE))     # back edge: x = SPINE_REAR_TOP_X + k*y
+    p = PANEL_BOTTOM
+    s = (SPINE_REAR_TOP_X + k * p[1] - p[0]) / (d[0] - k * d[1])
+    corner = (p[0] + s * d[0], p[1] + s * d[1])
+    return round_corner(corner, (-d[0], -d[1]), _unit((k, 1.0)), GRIP_HEEL_R)
+
+
+def grip_outline():
+    """Whole grip (back piece + panel) as one outline."""
     top = -4.0
-    rb = (spine_rear_x(SPINE_REAR_BOTTOM_Y), SPINE_REAR_BOTTOM_Y)
-    fb = (spine_front_x(SPINE_FRONT_BOTTOM_Y), SPINE_FRONT_BOTTOM_Y)
-    # rounded bottom: bulge 5 mm out from the middle of the bottom edge
-    mx, my = (rb[0] + fb[0]) / 2, (rb[1] + fb[1]) / 2
-    dx, dy = fb[0] - rb[0], fb[1] - rb[1]
-    n = math.hypot(dx, dy)
-    mid = (mx + 5.0 * dy / n, my - 5.0 * dx / n)
+    rear_top = (spine_rear_x(top), top)
+    h1, hm, h2 = grip_heel()
     return [
-        ('line', (spine_rear_x(top), top), (spine_front_x(top), top)),
-        ('line', (spine_front_x(top), top), fb),
-        ('arc', fb, mid, rb),
-        ('line', rb, (spine_rear_x(top), top)),
-    ]
-
-
-def panel_outline():
-    top_y = PANEL_FRONT[0][1]
-    rear_top = (spine_front_x(top_y) - 1.0, top_y)
-    rear_bot = (spine_front_x(SPINE_FRONT_BOTTOM_Y) - 1.0, SPINE_FRONT_BOTTOM_Y)
-    return [
-        ('line', rear_top, PANEL_FRONT[0]),
+        ('line', rear_top, (FRAME_REAR_X, top)),
+        ('line', (FRAME_REAR_X, top), (FRAME_REAR_X, PANEL_FRONT[0][1])),
+        ('line', (FRAME_REAR_X, PANEL_FRONT[0][1]), PANEL_FRONT[0]),
         ('spline',) + tuple(PANEL_FRONT),
         ('arc', PANEL_FRONT[-1], PANEL_TOE_MID, PANEL_BOTTOM),
-        ('line', PANEL_BOTTOM, rear_bot),
-        ('line', rear_bot, rear_top),
+        ('line', PANEL_BOTTOM, h1),
+        ('arc', h1, hm, h2),
+        ('line', h2, rear_top),
     ]
+
+
+def grip_seam():
+    """Line splitting the grip into the light back piece and the dark panel."""
+    return ((spine_front_x(0.0), 0.0), (spine_front_x(-85.0), -85.0))
 
 
 def guard_loops():
@@ -451,7 +470,73 @@ def cap_outline():
 
 
 def cap_inset_outline():
-    return heart_inset(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
+    return heart_inset(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE)
+
+
+def heart_lobes(width, center, tilt_deg, scale=1.0, inset=False):
+    """The two lobes of a 3D heart as (tip, lobe_centre, radius). Each lobe
+    is a ball with a cone running from it to the shared tip; together they
+    have exactly the outline of heart()."""
+    info = heart_shape(width)[1]
+    r, a, h = info['r'] * scale, info['a'] * scale, info['h'] * scale
+    shift = (0.0, 0.0)
+    if inset:
+        shift = _rot((0.0, -(1 - scale) * (info['h'] - info['r']) / 2.0), tilt_deg)
+    ox, oy = center[0] + shift[0], center[1] + shift[1]
+
+    def place(p):
+        q = _rot(p, tilt_deg)
+        return (q[0] + ox, q[1] + oy)
+    tip = place((0.0, -h))
+    return [(tip, place((a, 0.0)), r), (tip, place((-a, 0.0)), r)]
+
+
+def lobe_half_section(tip, c, r):
+    """Half outline of one lobe (cone + ball) to revolve around tip -> c.
+    Returns (loop, axis_end)."""
+    u = _unit((c[0] - tip[0], c[1] - tip[1]))
+    d = math.hypot(c[0] - tip[0], c[1] - tip[1])
+    theta = math.pi - math.acos(r / d)          # tangent point, measured from u
+
+    def on_ball(ang):
+        v = _rot(u, math.degrees(ang))
+        return (c[0] + r * v[0], c[1] + r * v[1])
+    p, mid, end = on_ball(theta), on_ball(theta / 2.0), on_ball(0.0)
+    return [('line', tip, p), ('arc', p, mid, end), ('line', end, tip)], end
+
+
+def heart_half_thickness(lobes, pt):
+    """Half-thickness of an unscaled 3D heart at side-view point pt."""
+    best = 0.0
+    for tip, c, r in lobes:
+        u = _unit((c[0] - tip[0], c[1] - tip[1]))
+        d = math.hypot(c[0] - tip[0], c[1] - tip[1])
+        vx, vy = pt[0] - tip[0], pt[1] - tip[1]
+        s = vx * u[0] + vy * u[1]                       # distance along the axis
+        rho = abs(vx * u[1] - vy * u[0])                # distance from the axis
+        s_tan = (d * d - r * r) / d                     # where the cone meets the ball
+        if s <= 0:
+            continue
+        if s <= s_tan:
+            R = s * r / math.sqrt(d * d - r * r)
+        elif s <= d + r:
+            R = math.sqrt(max(r * r - (s - d) ** 2, 0.0))
+        else:
+            continue
+        if rho < R:
+            best = max(best, math.sqrt(R * R - rho * rho))
+    return best
+
+
+def cap_z_scales():
+    """Z (side-to-side) squash for the cap and for its cream centre, so the
+    cap is CAP_DEPTH thick and the centre bulges CAP_INSET_PROUD out."""
+    big = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
+    small = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True)
+    zs = CAP_DEPTH / (2.0 * big[0][2])
+    peak = small[0][1]
+    zs_in = (zs * heart_half_thickness(big, peak) + CAP_INSET_PROUD) / small[0][2]
+    return zs, zs_in
 
 
 def grip_loop_outline():
@@ -602,10 +687,13 @@ def extrude_sym(comp, profile, width, op, participants=None, name=None):
     return feat
 
 
-def revolve_new(comp, sketch, name):
-    """Revolve the sketch's largest profile 360 degrees around the bore axis."""
+def revolve_new(comp, sketch, name, axis_from=None, axis_to=None):
+    """Revolve the sketch's largest profile 360 degrees around a side-view
+    axis (default: the bore axis)."""
+    a0 = axis_from or (BARREL_X0, BORE_AXIS_Y)
+    a1 = axis_to or (MUZZLE_X1, BORE_AXIS_Y)
     axis = sketch.sketchCurves.sketchLines.addByTwoPoints(
-        sk_point(sketch, BARREL_X0, BORE_AXIS_Y, 0.0), sk_point(sketch, MUZZLE_X1, BORE_AXIS_Y, 0.0))
+        sk_point(sketch, a0[0], a0[1], 0.0), sk_point(sketch, a1[0], a1[1], 0.0))
     axis.isConstruction = True
     revs = comp.features.revolveFeatures
     inp = revs.createInput(pick_profile(sketch), axis, NEW)
@@ -774,10 +862,15 @@ def build_frame(root):
     frame = extrude_sym(comp, pick_profile(sk), 'frame_width', NEW, name='Frame').bodies.item(0)
     fillet(comp, frame, FILLET_FRAME, 'Frame')
 
-    sk = side_sketch(comp, 'Grip back profile', [spine_outline()])
-    spine = extrude_sym(comp, pick_profile(sk), 'spine_width', NEW, name='Spine').bodies.item(0)
-    fillet(comp, spine, FILLET_SPINE, 'Grip back piece',
-           edge_filter=lambda e: e.boundingBox.minPoint.y * 10 < -FRAME_H - 2)
+    # Grip: one body with a rounded base, then split into two colours so
+    # the back piece and the panel sit perfectly flush.
+    sk = side_sketch(comp, 'Grip profile', [grip_outline()])
+    grip = extrude_sym(comp, pick_profile(sk), 'grip_width', NEW, name='Grip').bodies.item(0)
+    fillet(comp, grip, FILLET_GRIP, 'Grip',
+           edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.y * 10 < -FRAME_H - 1)
+    split_grip(comp)
+    sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
+    extrude_sym(comp, pick_profile(sk), 'grip_width + 2 mm', NEW, name='Grip pin')
 
     sk = side_sketch(comp, 'Trigger guard profile', guard_loops())
     guard = extrude_sym(comp, pick_profile(sk, loops=2), 'guard_width', NEW, name='Guard').bodies.item(0)
@@ -790,7 +883,8 @@ def build_frame(root):
     extrude_sym(comp, pick_profile(sk), 'eyelet_thickness', NEW, name='Eyelet tab')
 
     frame = body_named(comp, 'Frame')
-    combine_join(comp, frame, [b for b in bodies(comp) if b.name != 'Frame'])
+    combine_join(comp, frame, [b for b in bodies(comp)
+                               if b.name not in ('Frame', 'Grip panel', 'Grip pin')])
     frame = body_named(comp, 'Frame')
     frame.name = 'Frame & Grip'
 
@@ -801,15 +895,31 @@ def build_frame(root):
     return comp
 
 
-def build_panel(root):
-    comp = new_component(root, 'Grip Panel')
-    sk = side_sketch(comp, 'Grip panel profile', [panel_outline()])
-    panel = extrude_sym(comp, pick_profile(sk), 'panel_width', NEW, name='Grip panel').bodies.item(0)
-    fillet(comp, panel, FILLET_PANEL, 'Grip panel',
-           edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.y * 10 < -FRAME_H - 1)
-    sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
-    extrude_sym(comp, pick_profile(sk), 'panel_width + 2 mm', NEW, name='Grip pin')
-    return comp
+def split_grip(comp):
+    """Split the 'Grip' body along the colour seam into 'Spine' (back) and
+    'Grip panel' (front)."""
+    grip = body_named(comp, 'Grip')
+    sk = side_sketch(comp, 'Grip seam', [[('line',) + grip_seam()]])
+    prof = comp.createOpenProfile(sk.sketchCurves.sketchLines.item(0), False)
+    ext = comp.features.extrudeFeatures
+    inp = ext.createInput(prof, NEW)
+    inp.isSolid = False
+    inp.setSymmetricExtent(vi(80.0), True)
+    surf = ext.add(inp).bodies.item(0)
+    splits = comp.features.splitBodyFeatures
+    splits.add(splits.createInput(grip, surf, True))
+    try:
+        comp.features.removeFeatures.add(surf)
+    except Exception:
+        surf.isLightBulbOn = False
+    halves = [b for b in bodies(comp) if b.isSolid and b.name != 'Frame']
+
+    def reach(b):     # how far toward the muzzle the body goes (outline x)
+        bb = b.boundingBox
+        return max(X_SIGN * bb.minPoint.x, X_SIGN * bb.maxPoint.x)
+    halves.sort(key=reach)
+    halves[0].name = 'Spine'
+    halves[-1].name = 'Grip panel'
 
 
 def build_trigger(root):
@@ -831,19 +941,41 @@ def build_button(root):
 
 def build_rear_cap(root):
     comp = new_component(root, 'Rear Cap (Heart)')
-    sk = side_sketch(comp, 'Heart profile', [cap_outline()])
-    cap = extrude_sym(comp, pick_profile(sk), 'cap_width', NEW, name='Heart cap').bodies.item(0)
-    fillet(comp, cap, FILLET_CAP, 'Heart cap', edge_filter=flat_in('z'))
+    zs, zs_in = cap_z_scales()
+    build_3d_heart(comp, 'Heart cap', heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG), zs)
+    build_3d_heart(comp, 'Heart inset',
+                   heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True), zs_in)
     if INCLUDE_GRIP_LOOP:
         sk = side_sketch(comp, 'Grip loop profile', [grip_loop_outline()])
         loop = extrude_sym(comp, pick_profile(sk), 'loop_width', NEW, name='Grip loop').bodies.item(0)
         fillet(comp, loop, 2.5, 'Grip loop')
         cap = body_named(comp, 'Heart cap')
         combine_join(comp, cap, [body_named(comp, 'Grip loop')])
-    sk = side_sketch(comp, 'Heart inset', [cap_inset_outline()])
-    extrude_sym(comp, pick_profile(sk), 'cap_width + inset_proud * 2', NEW, name='Heart inset')
-    fillet(comp, body_named(comp, 'Heart inset'), 1.0, 'Heart inset', edge_filter=flat_in('z'))
     return comp
+
+
+def build_3d_heart(comp, name, lobes, z_scale):
+    """Puffy heart: each lobe is a ball + cone revolved to the shared tip;
+    the two are joined, then squashed side to side to the wanted thickness."""
+    made = []
+    for i, (tip, c, r) in enumerate(lobes):
+        loop, end = lobe_half_section(tip, c, r)
+        sk = side_sketch(comp, '{} lobe {}'.format(name, i + 1), [loop])
+        made.append(revolve_new(comp, sk, '{} lobe {}'.format(name, i + 1), tip, end))
+    combine_join(comp, made[0], made[1:])
+    body = body_named(comp, '{} lobe 1'.format(name))
+    body.name = name
+    try:
+        coll = adsk.core.ObjectCollection.create()
+        coll.add(body)
+        scales = comp.features.scaleFeatures
+        inp = scales.createInput(coll, comp.originConstructionPoint, adsk.core.ValueInput.createByReal(1.0))
+        one = adsk.core.ValueInput.createByReal(1.0)
+        inp.setToNonUniform(one, one, adsk.core.ValueInput.createByReal(z_scale))
+        scales.add(inp)
+    except Exception:
+        _skipped.append('{}: could not squash it side to side, so it is fully round'.format(name))
+    return body
 
 
 def build_charm(root):
@@ -920,7 +1052,7 @@ def run(context):
 
         comps = []
         for label, builder in (('Slide', build_slide), ('Muzzle & Shroud', build_muzzle),
-                               ('Frame & Grip', build_frame), ('Grip Panel', build_panel),
+                               ('Frame & Grip', build_frame),
                                ('Trigger', build_trigger), ('Top Button', build_button),
                                ('Rear Cap (Heart)', build_rear_cap), ('Charm', build_charm)):
             try:

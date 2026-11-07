@@ -112,9 +112,19 @@ axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
 y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
 if cgm.INCLUDE_GRIP_LOOP:
     draw(ax, [cgm.grip_loop_outline()], C['Heart cap'], 1)
-draw(ax, [cgm.spine_outline()], C['Frame & Grip'], 2)
 draw(ax, cgm.guard_loops(), C['Frame & Grip'], 2.5)
-draw(ax, [cgm.panel_outline()], C['Grip panel'], 3)
+grip = PathPatch(compound([cgm.grip_outline()]), facecolor=tuple(c / 255 for c in C['Frame & Grip']),
+                 edgecolor='#5b1d5e', lw=1.3, zorder=3)
+ax.add_patch(grip)
+(s0x, s0y), (s1x, s1y) = cgm.grip_seam()
+front_of_seam = Path([(s0x, s0y), (s1x, s1y), (s1x + 120, s1y), (s0x + 120, s0y), (s0x, s0y)])
+panel = PathPatch(compound([cgm.grip_outline()]), facecolor=tuple(c / 255 for c in C['Grip panel']),
+                  edgecolor='#5b1d5e', lw=1.3, zorder=3.1)
+ax.add_patch(panel)
+panel.set_clip_path(PathPatch(front_of_seam, transform=ax.transData))
+seam_line, = ax.plot([s0x, s1x], [s0y, s1y], color='#5b1d5e', lw=1.0, zorder=3.15)
+seam_line.set_clip_path(PathPatch(compound([cgm.grip_outline()]), transform=ax.transData))
+ax.add_patch(PathPatch(compound([cgm.grip_outline()]), fill=False, edgecolor='#5b1d5e', lw=1.3, zorder=3.2))
 draw(ax, [[('circle', cgm.GRIP_PIN, cgm.GRIP_PIN_R)]], C['Grip pin'], 3.2)
 draw(ax, [cgm.trigger_outline()], C['Trigger'], 2.7)
 ring, tab = cgm.eyelet_loops()
@@ -134,7 +144,16 @@ sight = cgm.front_sight_loops()[0][0]
 draw(ax, [rect(cgm.FLANGE_X + 1.5, sight[1][1] - sight[2], cgm.FLANGE_X + 4.5, sight[1][1] + sight[2])],
      C['Heart flange'], 5.1)
 draw(ax, [cgm.cap_outline()], C['Heart cap'], 5)
-draw(ax, [cgm.cap_inset_outline()], C['Heart inset'], 5.1)
+# Cream centre: where the inner 3D heart bulges out of the cap
+big = cgm.heart_lobes(cgm.CAP_HEART_W, cgm.CAP_CENTER, cgm.CAP_TILT_DEG)
+small = cgm.heart_lobes(cgm.CAP_HEART_W, cgm.CAP_CENTER, cgm.CAP_TILT_DEG, cgm.CAP_INSET_SCALE, inset=True)
+zs, zs_in = cgm.cap_z_scales()
+gx = [cgm.CAP_CENTER[0] - 45 + i * 0.5 for i in range(181)]
+gy = [cgm.CAP_CENTER[1] - 45 + j * 0.5 for j in range(181)]
+bulge = [[zs_in * cgm.heart_half_thickness(small, (x, yy)) - zs * cgm.heart_half_thickness(big, (x, yy))
+          for x in gx] for yy in gy]
+ax.contourf(gx, gy, bulge, levels=[0, 100], colors=[tuple(c / 255 for c in C['Heart inset'])], zorder=5.1)
+ax.contour(gx, gy, bulge, levels=[0], colors=['#5b1d5e'], linewidths=0.8, zorder=5.15)
 draw(ax, [cgm.ears_outline()], C['Slide'], 5.5)
 draw(ax, [cgm.button_outline()], C['Top button'], 5.5)
 draw(ax, [cgm.slide_outline()], C['Slide'], 6)
