@@ -1,10 +1,11 @@
-"""Draw the side-view outlines used by the Fusion script, without Fusion.
+"""Draw the outlines used by the Fusion script, without Fusion.
 
-    pip install matplotlib
+    pip install matplotlib pillow
     python Fusion/preview/preview_side.py
 
-Writes Fusion/preview/side-view.png. Handy for checking proportions after
-editing the DIMENSIONS block, before re-running the script in Fusion.
+Writes Fusion/preview/side-view.png: the left side view, a front view of the
+muzzle/shroud, and the concept sketch for comparison. Handy for checking
+proportions after editing the DIMENSIONS block, before re-running in Fusion.
 """
 import importlib.util
 import math
@@ -19,7 +20,9 @@ from matplotlib.patches import PathPatch  # noqa: E402
 from matplotlib.path import Path  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(HERE, '..', '..')
 SCRIPT = os.path.join(HERE, '..', 'Scripts', 'CelestiaGunMouse', 'CelestiaGunMouse.py')
+SKETCH = os.path.join(ROOT, 'reference', 'concept-sketch-v1.webp')
 
 # Stub out the Fusion API so the geometry part of the script can be imported.
 adsk = types.ModuleType('adsk')
@@ -30,6 +33,7 @@ sys.modules.update({'adsk': adsk, 'adsk.core': adsk.core, 'adsk.fusion': adsk.fu
 spec = importlib.util.spec_from_file_location('cgm', SCRIPT)
 cgm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cgm)
+C = cgm.BODY_COLORS
 
 
 def arc_points(p0, pm, p1, n=24):
@@ -45,16 +49,34 @@ def arc_points(p0, pm, p1, n=24):
             for i in range(n + 1)]
 
 
-def loop_path(loop):
+def spline_points(pts, n=12):
+    """Catmull-Rom curve through the points (close to Fusion's fitted spline)."""
+    ext = [pts[0]] + list(pts) + [pts[-1]]
+    out = [pts[0]]
+    for i in range(1, len(ext) - 2):
+        p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+        for k in range(1, n + 1):
+            t = k / n
+            out.append(tuple(0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t
+                                    + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t * t
+                                    + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t ** 3) for j in (0, 1)))
+    return out
+
+
+def loop_vertices(loop):
     if loop[0][0] == 'circle':
         (cx, cy), r = loop[0][1], loop[0][2]
-        pts = [(cx + r * math.cos(t * math.pi / 32), cy + r * math.sin(t * math.pi / 32)) for t in range(65)]
-    else:
-        pts = []
-        for seg in loop:
-            seg_pts = [seg[1], seg[2]] if seg[0] == 'line' else arc_points(*seg[1:])
-            pts.extend(seg_pts if not pts else seg_pts[1:])
-    return Path(pts, [Path.MOVETO] + [Path.LINETO] * (len(pts) - 1))
+        return [(cx + r * math.cos(t * math.pi / 32), cy + r * math.sin(t * math.pi / 32)) for t in range(65)]
+    pts = []
+    for seg in loop:
+        if seg[0] == 'line':
+            seg_pts = [seg[1], seg[2]]
+        elif seg[0] == 'arc':
+            seg_pts = arc_points(*seg[1:])
+        else:
+            seg_pts = spline_points(seg[1:])
+        pts.extend(seg_pts if not pts else seg_pts[1:])
+    return pts
 
 
 def _signed_area(v):
@@ -65,69 +87,104 @@ def compound(loops):
     """First loop is the outline; any further loops are holes."""
     paths = []
     for i, lp in enumerate(loops):
-        v = loop_path(lp).vertices
+        v = loop_vertices(lp)
         if (_signed_area(v) > 0) == (i > 0):     # outline CW, holes CCW
             v = v[::-1]
         paths.append(Path(v, [Path.MOVETO] + [Path.LINETO] * (len(v) - 1)))
     return Path.make_compound_path(*paths)
 
 
-def draw(ax, loops, rgb, z, edge='#5b1d5e', alpha=1.0):
-    color = tuple(c / 255 for c in rgb)
-    ax.add_patch(PathPatch(compound(loops), facecolor=color, edgecolor=edge, lw=1.4,
-                           alpha=alpha, zorder=z))
+def draw(ax, loops, rgb, z, edge='#5b1d5e'):
+    ax.add_patch(PathPatch(compound(loops), facecolor=tuple(c / 255 for c in rgb),
+                           edgecolor=edge, lw=1.3, zorder=z))
 
 
-fig, ax = plt.subplots(figsize=(12, 8))
-C = cgm.COLORS
-x0, x1, x2 = cgm.muzzle_x_positions()
-y = cgm.BORE_AXIS_Y
+def rect(x0, y0, x1, y1):
+    return cgm.polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
 
-# Back to front, roughly how the parts overlap from the left side.
+
+fig = plt.figure(figsize=(16, 9))
+ax = fig.add_axes([0.03, 0.06, 0.62, 0.88])
+axf = fig.add_axes([0.67, 0.50, 0.14, 0.42])
+axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
+
+# ---- Left side view (back to front, roughly how parts overlap) ----
+y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
 if cgm.INCLUDE_GRIP_LOOP:
-    draw(ax, [cgm.grip_loop_outline()], C['Rear Cap (Heart)'], 1)
-draw(ax, [cgm.grip_outline()], C['Frame & Grip'], 2)
-draw(ax, cgm.guard_loops(), C['Frame & Grip'], 3)
-draw(ax, [cgm.trigger_outline()], C['Trigger'], 3.5)
+    draw(ax, [cgm.grip_loop_outline()], C['Heart cap'], 1)
+draw(ax, [cgm.spine_outline()], C['Frame & Grip'], 2)
+draw(ax, cgm.guard_loops(), C['Frame & Grip'], 2.5)
+draw(ax, [cgm.panel_outline()], C['Grip panel'], 3)
+draw(ax, [[('circle', cgm.GRIP_PIN, cgm.GRIP_PIN_R)]], C['Grip pin'], 3.2)
+draw(ax, [cgm.trigger_outline()], C['Trigger'], 2.7)
 ring, tab = cgm.eyelet_loops()
 draw(ax, [tab], C['Frame & Grip'], 3)
 draw(ax, ring, C['Frame & Grip'], 3)
 draw(ax, [cgm.frame_outline()], C['Frame & Grip'], 4)
 draw(ax, [cgm.readout_outline()], (120, 40, 110), 4.5)
-draw(ax, [cgm.cap_outline()], C['Rear Cap (Heart)'], 5)
+ax.text((cgm.READOUT_X0 + cgm.READOUT_X1) / 2, (cgm.READOUT_Y0 + cgm.READOUT_Y1) / 2, '0001',
+        color='#f7a8d8', ha='center', va='center', fontsize=10, family='monospace', zorder=4.6)
+draw(ax, [rect(cgm.BARREL_X0, y - r, cgm.MUZZLE_X1, y + r)], C['Barrel'], 4.8)
+draw(ax, [rect(cgm.MUZZLE_X1 - 2, y - r - 0.6, cgm.MUZZLE_X1 + 1.5, y + r + 0.6)], C['Muzzle lip'], 5)
+fl = cgm.heart_shape(cgm.FLANGE_HEART_W)[1]
+f_top = cgm.FLANGE_HEART_CY + fl['r']
+f_bot = cgm.FLANGE_HEART_CY - fl['h']
+draw(ax, [rect(cgm.FLANGE_X, f_bot, cgm.FLANGE_X + cgm.FLANGE_T, f_top)], C['Heart flange'], 5.2)
+sight = cgm.front_sight_loops()[0][0]
+draw(ax, [rect(cgm.FLANGE_X + 1.5, sight[1][1] - sight[2], cgm.FLANGE_X + 4.5, sight[1][1] + sight[2])],
+     C['Heart flange'], 5.1)
+draw(ax, [cgm.cap_outline()], C['Heart cap'], 5)
+draw(ax, [cgm.cap_inset_outline()], C['Heart inset'], 5.1)
+draw(ax, [cgm.ears_outline()], C['Slide'], 5.5)
+draw(ax, [cgm.button_outline()], C['Top button'], 5.5)
 draw(ax, [cgm.slide_outline()], C['Slide'], 6)
 for s in cgm.serration_outlines():
     draw(ax, [s], (170, 40, 120), 6.5)
-draw(ax, [cgm.rear_sight_outline()], C['Slide'], 5.5)
-draw(ax, [cgm.button_outline()], C['Top Button'], 5.5)
-muz = [cgm.polygon([(x0, y - cgm.SHROUD_R), (x1, y - cgm.SHROUD_R), (x1, y + cgm.SHROUD_R), (x0, y + cgm.SHROUD_R)]),
-       cgm.polygon([(x1, y - cgm.MUZZLE_R), (x2, y - cgm.MUZZLE_R), (x2, y + cgm.MUZZLE_R), (x1, y + cgm.MUZZLE_R)])]
-draw(ax, muz[:1], C['Muzzle & Shroud'], 7)
-draw(ax, muz[1:], C['Muzzle & Shroud'], 7)
-draw(ax, cgm.front_sight_loops(), C['Muzzle & Shroud'], 6.8)
 draw(ax, cgm.charm_loops(), C['Charm'], 7)
-ax.plot([cgm.EYELET_CENTER[0], cgm.CHARM_CENTER[0]],
-        [cgm.EYELET_CENTER[1] - cgm.EYELET_R_IN, cgm.CHARM_CENTER[1] + 4.5],
+draw(ax, cgm.charm_bail_loops(), C['Charm'], 7)
+bail = cgm.charm_bail_loops()[0][0]
+ax.plot([cgm.EYELET_CENTER[0], bail[1][0]], [cgm.EYELET_CENTER[1] - cgm.EYELET_R_IN, bail[1][1] + 1.3],
         ls=':', lw=2.5, color='#b04a9a', zorder=0)
 
 labels = {
-    'slide': (60, 15), 'muzzle': (x2 - 9, y), 'front sight': (x2 - 8, 44),
-    'rear cap': (-20, 22), 'grip loop': (-36, -24), 'grip': (8, -60),
-    'trigger': (70, -28), 'readout': (88, -8), 'charm': (cgm.CHARM_CENTER[0], -74),
-    'top button': (40, 39),
+    'slide': (100, 16), 'barrel': (150, y), 'shroud': (cgm.FLANGE_X + 3, f_bot - 4),
+    'front sight': (cgm.FLANGE_X + 3, sight[1][1] + 10), 'rear cap': (-8, 30),
+    'grip loop': (-30, -28), 'grip': (15, -45), 'trigger': (52, -38), 'readout': (103, -18),
+    'charm': (cgm.CHARM_CENTER[0], cgm.CHARM_CENTER[1] - 15), 'top button': (47, 44),
+    'ears': (32, 47),
 }
 for text, (lx, ly) in labels.items():
-    ax.annotate(text, (lx, ly), ha='center', va='center', fontsize=9, color='#3b0f3d',
-                zorder=20, bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.75))
-
+    ax.annotate(text, (lx, ly), ha='center', va='center', fontsize=9, color='#3b0f3d', zorder=20,
+                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
 ax.set_aspect('equal')
-ax.set_xlim(-45, 170)
-ax.set_ylim(-110, 50)
+ax.set_xlim(-45, 195)
+ax.set_ylim(-80, 55)
 ax.invert_xaxis()      # muzzle on the left, like the sketch
 ax.grid(True, color='#eee', zorder=-1)
-ax.set_xlabel('x (mm, toward muzzle)')
-ax.set_ylabel('y (mm)')
-ax.set_title('CYBER Celestia CGM - left side view (outlines from the Fusion script)')
+ax.set_title('Left side (mm)')
+
+# ---- Front view of the muzzle / shroud ----
+draw(axf, cgm.flange_loops(), C['Heart flange'], 1)
+draw(axf, cgm.flange_inset_loops(), C['Heart inset'], 2)
+draw(axf, cgm.front_sight_loops(), C['Heart flange'], 1.5)
+draw(axf, [[('circle', (0, y), r + 0.6)], [('circle', (0, y), cgm.MUZZLE_LIP_R_IN)]], C['Muzzle lip'], 3)
+draw(axf, [[('circle', (0, y), cgm.MUZZLE_LIP_R_IN)], [('circle', (0, y), cgm.BORE_R)]], C['Barrel'], 3)
+draw(axf, [[('circle', (0, y), cgm.BORE_R)]], (90, 25, 90), 3)
+axf.set_aspect('equal')
+axf.set_xlim(-30, 30)
+axf.set_ylim(-15, 45)
+axf.grid(True, color='#eee', zorder=-1)
+axf.set_title('Muzzle from the front')
+
+# ---- The concept sketch ----
+try:
+    from PIL import Image
+    axs.imshow(Image.open(SKETCH))
+    axs.set_title('Concept sketch v1')
+except Exception as exc:          # Pillow missing or file moved
+    axs.text(0.5, 0.5, 'sketch not shown:\n{}'.format(exc), ha='center', va='center')
+axs.axis('off')
+
 out = os.path.join(HERE, 'side-view.png')
 fig.savefig(out, dpi=110, bbox_inches='tight')
 print('wrote', out)

@@ -8,22 +8,24 @@ HOW TO RUN
   device) > pick this folder > select CelestiaGunMouse > Run.
   The script always opens a NEW design, so it never touches your other work.
 
-WHAT YOU GET
-  One component per labelled part of the sketch:
-    Slide, Muzzle & Shroud (bore + front sight), Frame & Grip (trigger guard,
-    readout window, charm eyelet), Trigger, Top Button, Rear Cap (heart +
-    grip loop) and Charm.
+WHAT YOU GET (one component per part of the sketch)
+  Slide (cat-ear rear sight, grooves), Muzzle & Shroud (barrel, heart flange,
+  front sight ring, muzzle rings), Frame & Grip (frame, readout window,
+  trigger guard, grip back piece, charm eyelet), Grip Panel, Trigger,
+  Top Button, Rear Cap (heart + grip loop) and Charm (heart padlock).
 
 EDITING
   * Thicknesses (side-to-side widths, cut depths) are live Fusion parameters:
     Modify > Change Parameters. Change them and the model updates.
   * Outlines (lengths, heights, angles, positions) are the numbers in the
     DIMENSIONS block below. Edit them and run the script again.
+    Fusion/preview/preview_side.py draws them without Fusion.
 
-AXES (all numbers in millimetres)
-  +X points toward the muzzle, +Y points up, Z is across the gun.
-  -Z is the gun's LEFT side (the side shown in the sketch).
-  y = 0 is where the slide sits on the frame.
+COORDINATES USED IN THIS FILE (millimetres)
+  x grows toward the muzzle, y grows up, y = 0 is where the slide sits on
+  the frame, and x = 0 is the bottom-rear corner of the slide.
+  In Fusion the gun is mirrored so the muzzle points to -X and the LEFT side
+  (the side in the sketch, with the readout) faces you in the Front view.
 """
 
 import math
@@ -37,86 +39,103 @@ import adsk.fusion
 # DIMENSIONS (mm). Edit these, then re-run the script.
 # =============================================================================
 
-# Slide (the big top block)
-SLIDE_LEN = 125.0          # rear face (x = 0) to front face
-SLIDE_H = 30.0             # height above the frame
-SLIDE_FRONT_CHAMFER = 5.0  # top-front bevel
-SLIDE_REAR_CHAMFER = 5.0   # top-rear bevel
-SERRATION_XS = (66.0, 73.0, 80.0)   # where the 3 slanted grooves start (bottom)
-SERRATION_W = 2.5          # groove width
-SERRATION_LEAN = 8.0       # how far forward the top of each groove leans
+# Slide: a parallelogram whose front and rear ends lean forward at the top
+SLIDE_LEN = 134.0           # along the bottom edge
+SLIDE_H = 32.0
+SLIDE_FRONT_LEAN = 10.0     # top of the front face sits this far forward
+SLIDE_FRONT_BEVEL = 6.0     # bevel on the top-front corner
+SLIDE_REAR_LEAN = 24.0      # top of the rear face sits this far forward
+SERRATION_XS = (56.0, 63.0, 70.0, 82.0)   # where each groove starts (bottom)
+SERRATION_W = 1.6           # groove width
+SERRATION_LEAN = 11.0       # how far forward the top of each groove leans
 
-# Rear sight ("cat ears" just in front of the heart)
-REAR_SIGHT_X = 5.0         # rear edge of the rear sight
-REAR_SIGHT_LEN = 10.0
-REAR_SIGHT_H = 8.0
-REAR_SIGHT_NOTCH = 7.0     # gap between the two ears
+# Rear sight: two cat ears on top of the slide, just in front of the heart
+EARS_X0 = 26.0              # rear edge of the ears
+EARS_LEN = 12.0
+EARS_H = 10.0
+EARS_GAP = 6.0              # gap between the two ears
 
-# Muzzle / shroud (revolved around a horizontal axis)
-BORE_AXIS_Y = 12.0         # height of the barrel centreline
-SHROUD_LEN = 15.0          # collar between slide and muzzle
-SHROUD_R = 15.0
-MUZZLE_LEN = 18.0
-MUZZLE_R = 18.0
-MUZZLE_LIP_R = 14.0        # inner edge of the front lip ring
-MUZZLE_RECESS = 2.0        # how far the face sits back inside the lip
+# Top button (pill on top of the slide)
+BUTTON_X0, BUTTON_X1 = 40.0, 54.0
+BUTTON_H = 5.0
+
+# Barrel and muzzle (revolved around a horizontal axis)
+BORE_AXIS_Y = 11.0          # height of the barrel centreline
+BARREL_R = 15.0
+BARREL_X0 = 128.0           # starts inside the slide
+FLANGE_X = 162.0            # rear face of the heart flange (the "shroud")
+FLANGE_T = 6.0              # flange thickness
+MUZZLE_X1 = 184.0           # front face of the muzzle
+MUZZLE_LIP_R_IN = 11.0      # cream lip ring on the muzzle front
+MUZZLE_RING_R = 9.5         # inner ring step
 BORE_R = 7.0
-BORE_DEPTH = 15.0          # measured from the front of the muzzle
+BORE_DEPTH = 15.0
 
-# Front sight (upright ring on top of the muzzle)
+# Heart flange (shroud) around the barrel, tip pointing down
+FLANGE_HEART_W = 52.0
+FLANGE_HEART_CY = 16.0      # height of the line between the two lobes
+
+# Front sight: ring facing forward, sitting in the flange heart's top dip
 SIGHT_R_OUT = 6.0
 SIGHT_R_IN = 3.5
-SIGHT_X_FROM_FRONT = 8.0   # distance back from the muzzle face
+SIGHT_LIFT = 5.0            # ring centre height above the heart's dip
 
-# Frame (strip under the slide that holds the readout)
-FRAME_REAR_X = 6.0
-FRAME_FRONT_X = 122.0
-FRAME_H = 16.0
+# Frame (strip under the slide)
+FRAME_REAR_X = 4.0
+FRAME_FRONT_X = 128.0
+FRAME_H = 12.0
 
-# Readout window (recess on the frame's left side, for a small display)
-READOUT_X0, READOUT_X1 = 72.0, 104.0
-READOUT_Y0, READOUT_Y1 = -13.0, -3.0
+# Readout window (recess on the left side for a small display)
+READOUT_X0, READOUT_X1 = 84.0, 122.0
+READOUT_Y0, READOUT_Y1 = -10.0, -2.0
 
-# Grip
-GRIP_TOP_REAR_X = 8.0      # back of the grip where it meets the frame
-GRIP_TOP_FRONT_X = 52.0    # front of the grip where it meets the frame
-GRIP_LEN = 90.0            # measured along the rake
-GRIP_RAKE_DEG = 20.0       # lean of the grip back from vertical
+# Grip back piece (light pink, straight and raked)
+SPINE_REAR_TOP_X = 1.0      # rear edge where it meets y = 0
+SPINE_REAR_RAKE = 28.0      # degrees from vertical
+SPINE_FRONT_TOP_X = 14.0    # front edge where it meets the frame bottom
+SPINE_FRONT_RAKE = 24.0
+SPINE_REAR_BOTTOM_Y = -58.0
+SPINE_FRONT_BOTTOM_Y = -69.0
 
-# Trigger guard: the opening must fit your index finger (~20 mm).
-GUARD_OUT_FRONT_X = 96.0
-GUARD_OUT_BOTTOM_Y = -45.0
-GUARD_IN_FRONT_X = 88.0
-GUARD_IN_BOTTOM_Y = -38.0
+# Grip panel (darker pink, in front of the back piece). Front edge is a
+# smooth curve through these points, top to bottom.
+PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0, -63.0)]
+PANEL_TOE_MID = (29.0, -69.0)   # rounded bottom-front corner
+PANEL_BOTTOM = (22.0, -71.5)
+GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
+GRIP_PIN_R = 2.2
 
-# Heart rear cap (doubles as a beavertail/palm rest)
-CAP_CENTER = (-12.0, 16.0)  # centre between the two lobes
-CAP_HEART_W = 46.0          # lobe-to-lobe width before rotating
-CAP_TILT_DEG = 45.0         # tilts the tip forward/down into the slide
+# Trigger guard (compact loop in front of the grip)
+GUARD_OUT_FRONT_X = 70.0
+GUARD_OUT_BOTTOM_Y = -36.0
+GUARD_IN_REAR_X = 38.0
+GUARD_IN_FRONT_X = 66.0
+GUARD_IN_BOTTOM_Y = -32.0
 
-# Grip loop (curved band from the heart down into the back of the grip).
-# NOTE: as drawn, your palm sits inside this loop. Set False to leave it off.
+# Heart rear cap (doubles as a palm rest)
+CAP_CENTER = (-8.0, 18.0)   # midway between the two lobe centres
+CAP_HEART_W = 58.0          # lobe-to-lobe width before tilting
+CAP_TILT_DEG = 40.0         # tilts the tip forward/down into the slide
+INSET_SCALE = 0.68          # cream inner heart size (cap and flange)
+
+# Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
-LOOP_START = (-24.0, -1.0)  # inside the heart's rear lobe
-LOOP_MID = (-31.0, -26.0)   # furthest point behind the grip
-LOOP_END = (-2.0, -50.0)    # inside the back of the grip
-LOOP_BAND = 6.0             # band thickness seen from the side
+LOOP_START = (-22.0, -1.0)  # inside the heart's rear lobe
+LOOP_MID = (-21.0, -19.0)
+LOOP_END = (-14.0, -37.0)   # inside the grip back piece
+LOOP_T_START, LOOP_T_END = 7.0, 4.0
 
-# Charm eyelet on the frame + hanging heart charm
-EYELET_CENTER = (110.0, -19.5)
-EYELET_R_OUT, EYELET_R_IN = 4.0, 2.0
-CHARM_CENTER = (112.0, -60.0)
-CHARM_W = 16.0
-CHARM_HOLE_R = 1.2
-
-# Top button (the pill on top of the slide)
-BUTTON_X0, BUTTON_X1 = 32.0, 48.0
-BUTTON_H = 4.0
+# Charm (heart padlock) hanging from an eyelet at the front of the frame
+EYELET_CENTER = (120.0, -15.0)
+EYELET_R_OUT, EYELET_R_IN = 3.2, 1.6
+CHARM_CENTER = (123.0, -46.0)
+CHARM_W = 19.0
 
 # Fillet radii (if a fillet fails, the script skips it and tells you)
 FILLET_SLIDE = 2.0
-FILLET_FRAME = 2.0
-FILLET_GRIP = 6.0
+FILLET_FRAME = 1.5
+FILLET_SPINE = 4.0
+FILLET_PANEL = 5.0
 FILLET_GUARD = 2.0
 FILLET_CAP = 5.0
 FILLET_SMALL = 1.0
@@ -124,28 +143,38 @@ FILLET_SMALL = 1.0
 # Live parameters: (name, value in mm, comment). Shown in Change Parameters.
 LIVE_PARAMS = [
     ('slide_width', 28.0, 'Slide thickness, side to side'),
-    ('frame_width', 24.0, 'Frame thickness, side to side'),
-    ('grip_width', 30.0, 'Grip thickness, side to side'),
+    ('frame_width', 22.0, 'Frame thickness, side to side'),
+    ('spine_width', 26.0, 'Grip back piece thickness'),
+    ('panel_width', 30.0, 'Grip panel thickness'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
-    ('button_width', 10.0, 'Top button width'),
-    ('cap_width', 26.0, 'Heart rear cap thickness'),
+    ('button_width', 9.0, 'Top button width'),
+    ('flange_width', 6.0, 'Heart flange (shroud) thickness'),
+    ('cap_width', 24.0, 'Heart rear cap thickness'),
+    ('inset_proud', 1.5, 'How far the cream heart insets stand out'),
     ('loop_width', 10.0, 'Grip loop thickness'),
     ('sight_thickness', 3.0, 'Front sight ring thickness'),
     ('charm_thickness', 4.0, 'Heart charm thickness'),
-    ('eyelet_thickness', 4.0, 'Charm eyelet thickness'),
-    ('serration_depth', 1.0, 'Depth of the slide grooves'),
+    ('eyelet_thickness', 3.5, 'Charm eyelet thickness'),
+    ('serration_depth', 0.8, 'Depth of the slide grooves'),
     ('readout_depth', 1.5, 'Depth of the readout window recess'),
 ]
 
-# Colours from the sketch (R, G, B)
-COLORS = {
+# Colours from the sketch (R, G, B), by body name
+CREAM = (252, 240, 185)
+BODY_COLORS = {
     'Slide': (232, 72, 170),
-    'Muzzle & Shroud': (248, 176, 222),
-    'Frame & Grip': (246, 140, 205),
+    'Barrel': (246, 160, 210),
+    'Muzzle lip': CREAM,
+    'Heart flange': (250, 196, 236),
+    'Flange inset': CREAM,
+    'Frame & Grip': (250, 190, 228),
+    'Grip panel': (238, 112, 190),
+    'Grip pin': (190, 45, 135),
     'Trigger': (200, 70, 160),
-    'Top Button': (225, 60, 150),
-    'Rear Cap (Heart)': (252, 242, 185),
+    'Top button': (225, 60, 150),
+    'Heart cap': (240, 196, 240),
+    'Heart inset': CREAM,
     'Charm': (215, 55, 145),
 }
 
@@ -153,39 +182,37 @@ COLORS = {
 # =============================================================================
 # 2D OUTLINES (pure geometry, no Fusion calls).
 # A loop is a list of segments:
-#   ('line', p0, p1)        straight line
-#   ('arc', p0, pmid, p1)   arc through three points
-#   ('circle', c, r)        full circle
+#   ('line', p0, p1)            straight line
+#   ('arc', p0, pmid, p1)       arc through three points
+#   ('spline', p0, p1, ... pn)  smooth curve through the points
+#   ('circle', c, r)            full circle
 # Points are (x, y) in the side view unless noted.
 # =============================================================================
 
-def _rot(p, deg, about=(0.0, 0.0)):
+def _rot(p, deg):
     a = math.radians(deg)
-    x, y = p[0] - about[0], p[1] - about[1]
-    return (about[0] + x * math.cos(a) - y * math.sin(a),
-            about[1] + x * math.sin(a) + y * math.cos(a))
+    return (p[0] * math.cos(a) - p[1] * math.sin(a), p[0] * math.sin(a) + p[1] * math.cos(a))
 
 
 def polygon(pts):
     return [('line', pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
 
 
-def transform(loop, deg=0.0, offset=(0.0, 0.0)):
+def transform(loop, deg=0.0, offset=(0.0, 0.0), scale=1.0):
     out = []
     for seg in loop:
         if seg[0] == 'circle':
             c = _rot(seg[1], deg)
-            out.append(('circle', (c[0] + offset[0], c[1] + offset[1]), seg[2]))
+            out.append(('circle', (c[0] * scale + offset[0], c[1] * scale + offset[1]), seg[2] * scale))
         else:
             pts = [_rot(p, deg) for p in seg[1:]]
-            out.append((seg[0],) + tuple((p[0] + offset[0], p[1] + offset[1]) for p in pts))
+            out.append((seg[0],) + tuple((p[0] * scale + offset[0], p[1] * scale + offset[1]) for p in pts))
     return out
 
 
-def heart(width, center=(0.0, 0.0), tilt_deg=0.0):
-    """Heart from two circular lobes and two straight sides to a point.
-    `center` is midway between the lobe centres; the tip points down
-    before tilting (positive tilt = counter-clockwise)."""
+def heart_shape(width):
+    """Heart centred between its lobe centres, tip down: two circular lobes
+    and two straight sides meeting at a point. Returns (loop, info)."""
     r = width / 3.2
     a = 0.6 * r                       # lobe centre offset from the middle
     h = 1.6 * r                       # tip depth below the lobe centres
@@ -200,13 +227,11 @@ def heart(width, center=(0.0, 0.0), tilt_deg=0.0):
         cands = [(cx + r * math.cos(base + s * off), r * math.sin(base + s * off)) for s in (1, -1)]
         return max(cands, key=lambda p: outer_sign * p[0])
 
-    def arc_mid(cx, p0, p1, ccw):
+    def arc_mid(cx, p0, p1):
         a0 = math.atan2(p0[1], p0[0] - cx)
         a1 = math.atan2(p1[1], p1[0] - cx)
-        if ccw and a1 < a0:
+        if a1 < a0:
             a1 += 2 * math.pi
-        if not ccw and a1 > a0:
-            a1 -= 2 * math.pi
         m = (a0 + a1) / 2
         return (cx + r * math.cos(m), r * math.sin(m))
 
@@ -214,11 +239,24 @@ def heart(width, center=(0.0, 0.0), tilt_deg=0.0):
     tl = tangent_point(-a, -1)
     loop = [
         ('line', tip, tr),
-        ('arc', tr, arc_mid(a, tr, cusp, True), cusp),
-        ('arc', cusp, arc_mid(-a, cusp, tl, True), tl),
+        ('arc', tr, arc_mid(a, tr, cusp), cusp),
+        ('arc', cusp, arc_mid(-a, cusp, tl), tl),
         ('line', tl, tip),
     ]
-    return transform(loop, tilt_deg, center)
+    return loop, {'r': r, 'a': a, 'h': h, 'cusp_y': cusp[1]}
+
+
+def heart(width, center=(0.0, 0.0), tilt_deg=0.0):
+    return transform(heart_shape(width)[0], tilt_deg, center)
+
+
+def heart_inset(width, center, tilt_deg, scale=INSET_SCALE):
+    """Smaller heart inside a heart, nudged toward the tip so the rim is
+    even all round."""
+    info = heart_shape(width)[1]
+    shift = _rot((0.0, -(1 - scale) * (info['h'] - info['r']) / 2.0), tilt_deg)
+    return transform(heart_shape(width)[0], tilt_deg,
+                     (center[0] + shift[0], center[1] + shift[1]), scale)
 
 
 def circle_through(p0, p1, p2):
@@ -231,141 +269,48 @@ def circle_through(p0, p1, p2):
     return (ux, uy), math.hypot(ax - ux, ay - uy)
 
 
-def arc_band(p0, pm, p1, thickness):
-    """Closed band of constant thickness centred on the arc p0 -> pm -> p1."""
-    c, r = circle_through(p0, pm, p1)
-    t = thickness / 2.0
+def arc_band(p0, pm, p1, t_start, t_end):
+    """Closed band along the arc p0 -> pm -> p1 that tapers from t_start to t_end."""
+    c, _ = circle_through(p0, pm, p1)
 
-    def on(p, rr):
+    def off(p, t):
         ang = math.atan2(p[1] - c[1], p[0] - c[0])
-        return (c[0] + rr * math.cos(ang), c[1] + rr * math.sin(ang))
+        return (p[0] + t * math.cos(ang), p[1] + t * math.sin(ang))
 
-    o0, om, o1 = on(p0, r + t), on(pm, r + t), on(p1, r + t)
-    i0, im, i1 = on(p0, r - t), on(pm, r - t), on(p1, r - t)
-    return [('arc', o0, om, o1), ('line', o1, i1), ('arc', i1, im, i0), ('line', i0, o0)]
+    ts = (t_start / 2.0, (t_start + t_end) / 4.0, t_end / 2.0)
+    o = [off(p, t) for p, t in zip((p0, pm, p1), ts)]
+    i = [off(p, -t) for p, t in zip((p0, pm, p1), ts)]
+    return [('arc', o[0], o[1], o[2]), ('line', o[2], i[2]), ('arc', i[2], i[1], i[0]), ('line', i[0], o[0])]
 
 
 def slide_outline():
     L, H = SLIDE_LEN, SLIDE_H
-    return polygon([(0, 0), (L, 0), (L, H - SLIDE_FRONT_CHAMFER),
-                    (L - SLIDE_FRONT_CHAMFER, H), (SLIDE_REAR_CHAMFER, H),
-                    (0, H - SLIDE_REAR_CHAMFER)])
+    fx = L + SLIDE_FRONT_LEAN
+    b = SLIDE_FRONT_BEVEL
+    return polygon([(0, 0), (L, 0), (fx - b * SLIDE_FRONT_LEAN / H, H - b),
+                    (fx - b * 1.6, H), (SLIDE_REAR_LEAN, H)])
 
 
-def rear_sight_outline():
-    x0, y0 = REAR_SIGHT_X, SLIDE_H - 1.0   # sinks 1 mm into the slide
-    return polygon([(x0, y0), (x0 + REAR_SIGHT_LEN, y0),
-                    (x0 + REAR_SIGHT_LEN * 0.3, SLIDE_H + REAR_SIGHT_H),
-                    (x0, SLIDE_H + REAR_SIGHT_H * 0.75)])
+def slide_rear_x(y):
+    """x of the slanted rear face at height y."""
+    return SLIDE_REAR_LEAN * y / SLIDE_H
+
+
+def ears_outline():
+    x0, y0 = EARS_X0, SLIDE_H - 1.0   # sinks 1 mm into the slide
+    return polygon([(x0, y0), (x0 + EARS_LEN, y0), (x0 + 2.0, SLIDE_H + EARS_H)])
 
 
 def serration_outlines():
-    y0, y1 = 4.0, SLIDE_H - 4.0
+    y0, y1 = 5.0, SLIDE_H - 5.0
     return [polygon([(x, y0), (x + SERRATION_W, y0),
                      (x + SERRATION_W + SERRATION_LEAN, y1), (x + SERRATION_LEAN, y1)])
             for x in SERRATION_XS]
 
 
-def muzzle_x_positions():
-    x0 = SLIDE_LEN
-    x1 = x0 + SHROUD_LEN
-    x2 = x1 + MUZZLE_LEN
-    return x0, x1, x2
-
-
-def muzzle_half_section():
-    """Half cross-section revolved around y = BORE_AXIS_Y. The first segment
-    is the axis itself."""
-    x0, x1, x2 = muzzle_x_positions()
-    y = BORE_AXIS_Y
-    bore_bottom = x2 - BORE_DEPTH
-    face = x2 - MUZZLE_RECESS
-    pts = [(bore_bottom, y), (x0, y), (x0, y + SHROUD_R), (x1, y + SHROUD_R),
-           (x1, y + MUZZLE_R), (x2, y + MUZZLE_R), (x2, y + MUZZLE_LIP_R),
-           (face, y + MUZZLE_LIP_R), (face, y + BORE_R), (bore_bottom, y + BORE_R)]
-    return polygon(pts)
-
-
-def front_sight_loops():
-    _, _, x2 = muzzle_x_positions()
-    c = (x2 - SIGHT_X_FROM_FRONT, BORE_AXIS_Y + MUZZLE_R + SIGHT_R_OUT - 1.0)
-    return [[('circle', c, SIGHT_R_OUT)], [('circle', c, SIGHT_R_IN)]]
-
-
-def frame_outline():
-    r, f, h = FRAME_REAR_X, FRAME_FRONT_X, FRAME_H
-    return [
-        ('line', (r, 0), (f, 0)),
-        ('line', (f, 0), (f, -6)),
-        ('arc', (f, -6), (f - 6, -h + 3), (f - 16, -h)),
-        ('line', (f - 16, -h), (r + 4, -h)),
-        ('line', (r + 4, -h), (r, -h + 4)),
-        ('line', (r, -h + 4), (r, 0)),
-    ]
-
-
-def grip_line_x(x_top, y):
-    """x of a grip edge (front or back) at height y, given where it meets the frame."""
-    return x_top + (y + FRAME_H) * math.tan(math.radians(GRIP_RAKE_DEG))
-
-
-def grip_outline():
-    top = -FRAME_H + 6.0                                   # overlaps the frame
-    bottom = -FRAME_H - GRIP_LEN * math.cos(math.radians(GRIP_RAKE_DEG))
-    return polygon([(grip_line_x(GRIP_TOP_REAR_X, top), top),
-                    (grip_line_x(GRIP_TOP_FRONT_X, top), top),
-                    (grip_line_x(GRIP_TOP_FRONT_X, bottom), bottom),
-                    (grip_line_x(GRIP_TOP_REAR_X, bottom), bottom)])
-
-
-def guard_loops():
-    h = FRAME_H
-    fx, by = GUARD_OUT_FRONT_X, GUARD_OUT_BOTTOM_Y
-    ifx, iby = GUARD_IN_FRONT_X, GUARD_IN_BOTTOM_Y
-    gfx = GRIP_TOP_FRONT_X
-    outer = [
-        ('line', (gfx - 12, -h + 2), (fx, -h + 2)),
-        ('arc', (fx, -h + 2), (fx + 5, (-h + by) / 2), (fx - 10, by)),
-        ('line', (fx - 10, by), (grip_line_x(gfx, by) - 3, by)),
-        ('line', (grip_line_x(gfx, by) - 3, by), (gfx - 12, -h + 2)),
-    ]
-    rear_top = (gfx + 2, -h)
-    rear_bot = (grip_line_x(gfx, iby) + 6, iby)
-    inner = [
-        ('line', rear_top, (ifx, -h)),
-        ('arc', (ifx, -h), (ifx + 4, (-h + iby) / 2 - 0.5), (ifx - 6, iby)),
-        ('line', (ifx - 6, iby), rear_bot),
-        ('line', rear_bot, rear_top),
-    ]
-    return [outer, inner]
-
-
-def trigger_outline():
-    h = FRAME_H
-    return [
-        ('line', (68, -h), (76, -h)),
-        ('arc', (76, -h), (75, -h - 10), (67, -h - 17)),
-        ('line', (67, -h - 17), (64, -h - 15)),
-        ('arc', (64, -h - 15), (68.5, -h - 8), (68, -h)),
-    ]
-
-
-def readout_outline():
-    return polygon([(READOUT_X0, READOUT_Y0), (READOUT_X1, READOUT_Y0),
-                    (READOUT_X1, READOUT_Y1), (READOUT_X0, READOUT_Y1)])
-
-
-def eyelet_loops():
-    c = EYELET_CENTER
-    ring = [[('circle', c, EYELET_R_OUT)], [('circle', c, EYELET_R_IN)]]
-    tab = polygon([(c[0] - 2.5, c[1] + EYELET_R_IN + 0.8), (c[0] + 2.5, c[1] + EYELET_R_IN + 0.8),
-                   (c[0] + 2.5, -FRAME_H + 4), (c[0] - 2.5, -FRAME_H + 4)])
-    return ring, tab
-
-
 def button_outline():
-    x0, x1, y0, y1 = BUTTON_X0, BUTTON_X1, SLIDE_H, SLIDE_H + BUTTON_H
-    rr = BUTTON_H / 2.0
+    x0, x1, y0, y1 = BUTTON_X0, BUTTON_X1, SLIDE_H - 0.5, SLIDE_H + BUTTON_H
+    rr = (y1 - y0) / 2.0
     ym = (y0 + y1) / 2.0
     return [
         ('line', (x0 + rr, y0), (x1 - rr, y0)),
@@ -375,25 +320,173 @@ def button_outline():
     ]
 
 
+def barrel_half_section():
+    """Half cross-section revolved around y = BORE_AXIS_Y."""
+    y = BORE_AXIS_Y
+    x1 = MUZZLE_X1
+    bb = x1 - BORE_DEPTH
+    pts = [(bb, y), (BARREL_X0, y), (BARREL_X0, y + BARREL_R), (x1, y + BARREL_R),
+           (x1, y + MUZZLE_LIP_R_IN), (x1 - 1.5, y + MUZZLE_LIP_R_IN),
+           (x1 - 1.5, y + MUZZLE_RING_R), (x1 - 3.0, y + MUZZLE_RING_R),
+           (x1 - 3.0, y + BORE_R), (bb, y + BORE_R)]
+    return polygon(pts)
+
+
+def muzzle_lip_half_section():
+    """Cream lip ring standing 1.5 mm proud of the muzzle front."""
+    y, x1 = BORE_AXIS_Y, MUZZLE_X1
+    return polygon([(x1 - 2.0, y + MUZZLE_LIP_R_IN), (x1 + 1.5, y + MUZZLE_LIP_R_IN),
+                    (x1 + 1.5, y + BARREL_R + 0.6), (x1 - 2.0, y + BARREL_R + 0.6)])
+
+
+# Front-view outlines (u = across the gun, v = height) for the flange
+def flange_loops():
+    return [heart(FLANGE_HEART_W, (0.0, FLANGE_HEART_CY))]
+
+
+def flange_inset_loops():
+    return [heart_inset(FLANGE_HEART_W, (0.0, FLANGE_HEART_CY), 0.0)]
+
+
+def front_sight_loops():
+    cusp = FLANGE_HEART_CY + heart_shape(FLANGE_HEART_W)[1]['cusp_y']
+    c = (0.0, cusp + SIGHT_LIFT)
+    return [[('circle', c, SIGHT_R_OUT)], [('circle', c, SIGHT_R_IN)]]
+
+
+def frame_outline():
+    r, f, h = FRAME_REAR_X, FRAME_FRONT_X, FRAME_H
+    return [
+        ('line', (r, 0), (f, 0)),
+        ('line', (f, 0), (f, -h * 0.55)),
+        ('arc', (f, -h * 0.55), (f - 1.6, -h * 0.85), (f - 6, -h)),
+        ('line', (f - 6, -h), (r, -h)),
+        ('line', (r, -h), (r, 0)),
+    ]
+
+
+def readout_outline():
+    return polygon([(READOUT_X0, READOUT_Y0), (READOUT_X1, READOUT_Y0),
+                    (READOUT_X1, READOUT_Y1), (READOUT_X0, READOUT_Y1)])
+
+
+def spine_rear_x(y):
+    return SPINE_REAR_TOP_X + y * math.tan(math.radians(SPINE_REAR_RAKE))
+
+
+def spine_front_x(y):
+    return SPINE_FRONT_TOP_X + (y + FRAME_H) * math.tan(math.radians(SPINE_FRONT_RAKE))
+
+
+def spine_outline():
+    top = -4.0
+    rb = (spine_rear_x(SPINE_REAR_BOTTOM_Y), SPINE_REAR_BOTTOM_Y)
+    fb = (spine_front_x(SPINE_FRONT_BOTTOM_Y), SPINE_FRONT_BOTTOM_Y)
+    # rounded bottom: bulge 5 mm out from the middle of the bottom edge
+    mx, my = (rb[0] + fb[0]) / 2, (rb[1] + fb[1]) / 2
+    dx, dy = fb[0] - rb[0], fb[1] - rb[1]
+    n = math.hypot(dx, dy)
+    mid = (mx + 5.0 * dy / n, my - 5.0 * dx / n)
+    return [
+        ('line', (spine_rear_x(top), top), (spine_front_x(top), top)),
+        ('line', (spine_front_x(top), top), fb),
+        ('arc', fb, mid, rb),
+        ('line', rb, (spine_rear_x(top), top)),
+    ]
+
+
+def panel_outline():
+    top_y = PANEL_FRONT[0][1]
+    rear_top = (spine_front_x(top_y) - 1.0, top_y)
+    rear_bot = (spine_front_x(SPINE_FRONT_BOTTOM_Y) - 1.0, SPINE_FRONT_BOTTOM_Y)
+    return [
+        ('line', rear_top, PANEL_FRONT[0]),
+        ('spline',) + tuple(PANEL_FRONT),
+        ('arc', PANEL_FRONT[-1], PANEL_TOE_MID, PANEL_BOTTOM),
+        ('line', PANEL_BOTTOM, rear_bot),
+        ('line', rear_bot, rear_top),
+    ]
+
+
+def guard_loops():
+    h = FRAME_H
+    fx, by = GUARD_OUT_FRONT_X, GUARD_OUT_BOTTOM_Y
+    rear = PANEL_FRONT[0][0] - 8.0          # hidden inside the grip panel
+    outer = [
+        ('line', (rear, -h + 2), (fx, -h + 2)),
+        ('arc', (fx, -h + 2), (fx + 8, (-h + by) / 2 + 2), (fx - 6, by)),
+        ('line', (fx - 6, by), (rear, by)),
+        ('line', (rear, by), (rear, -h + 2)),
+    ]
+    ir, ifx, iby = GUARD_IN_REAR_X, GUARD_IN_FRONT_X, GUARD_IN_BOTTOM_Y
+    inner = [
+        ('line', (ir, -h), (ifx, -h)),
+        ('arc', (ifx, -h), (ifx + 6, (-h + iby) / 2 + 1), (ifx - 6, iby)),
+        ('line', (ifx - 6, iby), (ir - 1, iby)),
+        ('line', (ir - 1, iby), (ir, -h)),
+    ]
+    return [outer, inner]
+
+
+def trigger_outline():
+    h = FRAME_H
+    return [
+        ('line', (48, -h), (55, -h)),
+        ('arc', (55, -h), (51, -h - 8), (56, -h - 15)),
+        ('line', (56, -h - 15), (53, -h - 16.5)),
+        ('arc', (53, -h - 16.5), (46, -h - 9), (48, -h)),
+    ]
+
+
+def eyelet_loops():
+    c = EYELET_CENTER
+    ring = [[('circle', c, EYELET_R_OUT)], [('circle', c, EYELET_R_IN)]]
+    tab = polygon([(c[0] - 2.2, c[1] + EYELET_R_IN + 0.6), (c[0] + 2.2, c[1] + EYELET_R_IN + 0.6),
+                   (c[0] + 2.2, -FRAME_H + 3), (c[0] - 2.2, -FRAME_H + 3)])
+    return ring, tab
+
+
 def cap_outline():
     return heart(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
 
 
+def cap_inset_outline():
+    return heart_inset(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
+
+
 def grip_loop_outline():
-    return arc_band(LOOP_START, LOOP_MID, LOOP_END, LOOP_BAND)
+    return arc_band(LOOP_START, LOOP_MID, LOOP_END, LOOP_T_START, LOOP_T_END)
 
 
 def charm_loops():
+    """Heart with a keyhole cut through it (a heart padlock)."""
     cx, cy = CHARM_CENTER
-    r = CHARM_W / 3.2
-    hole = (cx, cy + 0.8 * r - 1.2 - CHARM_HOLE_R - 1.0)
-    return [heart(CHARM_W, CHARM_CENTER), [('circle', hole, CHARM_HOLE_R)]]
+    kc = (cx, cy - 1.0)               # keyhole circle centre
+    kr = 1.9
+    half = 0.9
+    ky = kc[1] - math.sqrt(kr * kr - half * half)
+    keyhole = [
+        ('arc', (cx + half, ky), (cx, kc[1] + kr), (cx - half, ky)),
+        ('line', (cx - half, ky), (cx - 1.5, cy - 6.0)),
+        ('line', (cx - 1.5, cy - 6.0), (cx + 1.5, cy - 6.0)),
+        ('line', (cx + 1.5, cy - 6.0), (cx + half, ky)),
+    ]
+    return [heart(CHARM_W, CHARM_CENTER), keyhole]
+
+
+def charm_bail_loops():
+    """Small ring on top of the charm for the chain."""
+    cx, cy = CHARM_CENTER
+    r = heart_shape(CHARM_W)[1]['r']
+    c = (cx, cy + r + 0.8)
+    return [[('circle', c, 2.5)], [('circle', c, 1.3)]]
 
 
 # =============================================================================
 # FUSION HELPERS
 # =============================================================================
 
+X_SIGN = -1.0   # mirror so the muzzle points to -X (left side faces the Front view)
 _skipped = []   # things that could not be built (shown at the end)
 
 
@@ -409,12 +502,12 @@ def vi(v):
 
 
 def sk_point(sketch, x, y, z):
-    p = sketch.modelToSketchSpace(adsk.core.Point3D.create(cm(x), cm(y), cm(z)))
+    p = sketch.modelToSketchSpace(adsk.core.Point3D.create(cm(X_SIGN * x), cm(y), cm(z)))
     return adsk.core.Point3D.create(p.x, p.y, 0)
 
 
 def draw_loops(sketch, loops, to3d):
-    """Draw loops into a sketch. to3d maps a 2D outline point to model (x, y, z) mm."""
+    """Draw loops into a sketch. to3d maps an outline point to (x, y, z) mm."""
     curves = sketch.sketchCurves
     for loop in loops:
         for seg in loop:
@@ -429,17 +522,19 @@ def draw_loops(sketch, loops, to3d):
                 curves.sketchArcs.addByThreePoints(sk_point(sketch, *to3d(seg[1])),
                                                    sk_point(sketch, *to3d(seg[2])),
                                                    sk_point(sketch, *to3d(seg[3])))
+            elif kind == 'spline':
+                pts = adsk.core.ObjectCollection.create()
+                for p in seg[1:]:
+                    pts.add(sk_point(sketch, *to3d(p)))
+                curves.sketchFittedSplines.add(pts)
     _merge_endpoints(sketch)
 
 
 def _merge_endpoints(sketch, tol=1e-5):
-    """Join coincident line/arc ends so loops are properly connected."""
-    seen = []
-    for i in range(sketch.sketchPoints.count):
-        sp = sketch.sketchPoints.item(i)
-        seen.append(sp)
+    """Join coincident curve ends so loops are properly connected."""
+    pts = [sketch.sketchPoints.item(i) for i in range(sketch.sketchPoints.count)]
     keep = []
-    for sp in seen:
+    for sp in pts:
         try:
             if not sp.isValid:
                 continue
@@ -457,11 +552,19 @@ def _merge_endpoints(sketch, tol=1e-5):
             pass
 
 
-def side_sketch(comp, name, loops, plane=None, z=0.0):
+def side_sketch(comp, name, loops, plane=None):
     """Sketch side-view loops (x, y) on the XY plane or a plane parallel to it."""
     sk = comp.sketches.add(plane or comp.xYConstructionPlane)
     sk.name = name
-    draw_loops(sk, loops, lambda p: (p[0], p[1], z))
+    draw_loops(sk, loops, lambda p: (p[0], p[1], 0.0))
+    return sk
+
+
+def front_sketch(comp, name, loops, x):
+    """Sketch front-view loops (u = across, v = height) on a plane at x."""
+    sk = comp.sketches.add(x_plane(comp, x))
+    sk.name = name
+    draw_loops(sk, loops, lambda p: (x, p[1], p[0]))
     return sk
 
 
@@ -477,16 +580,6 @@ def pick_profile(sketch, loops=None):
             best, best_area = pr, area
     if best is None:
         raise RuntimeError('No suitable profile found in sketch "{}"'.format(sketch.name))
-    return best
-
-
-def smallest_profile(sketch):
-    best, best_area = None, None
-    for i in range(sketch.profiles.count):
-        pr = sketch.profiles.item(i)
-        area = pr.areaProperties(adsk.fusion.CalculationAccuracy.LowCalculationAccuracy).area
-        if best_area is None or area < best_area:
-            best, best_area = pr, area
     return best
 
 
@@ -509,6 +602,19 @@ def extrude_sym(comp, profile, width, op, participants=None, name=None):
     return feat
 
 
+def revolve_new(comp, sketch, name):
+    """Revolve the sketch's largest profile 360 degrees around the bore axis."""
+    axis = sketch.sketchCurves.sketchLines.addByTwoPoints(
+        sk_point(sketch, BARREL_X0, BORE_AXIS_Y, 0.0), sk_point(sketch, MUZZLE_X1, BORE_AXIS_Y, 0.0))
+    axis.isConstruction = True
+    revs = comp.features.revolveFeatures
+    inp = revs.createInput(pick_profile(sketch), axis, NEW)
+    inp.setAngleExtent(False, adsk.core.ValueInput.createByString('360 deg'))
+    body = revs.add(inp).bodies.item(0)
+    body.name = name
+    return body
+
+
 def offset_plane(comp, base, expr, axis, expected_mm):
     """Offset construction plane. Checks it landed on the expected side and
     flips it if Fusion's normal points the other way."""
@@ -526,6 +632,11 @@ def offset_plane(comp, base, expr, axis, expected_mm):
         pl.deleteMe()
         pl = make('-(' + expr + ')' if isinstance(expr, str) else -expr)
     return pl
+
+
+def x_plane(comp, x):
+    """Plane square to the barrel at outline position x (mm)."""
+    return offset_plane(comp, comp.yZConstructionPlane, X_SIGN * x, 'x', X_SIGN * x)
 
 
 def combine_join(comp, target, tools):
@@ -566,11 +677,16 @@ def fillet(comp, body, radius, label, edge_filter=None):
     _skipped.append('{}: fillet skipped'.format(label))
 
 
-def on_side_face(edge):
-    """True for edges lying flat on a +Z/-Z face. Use for outlines with
-    tangent (smooth) joins, whose across-the-gun edges can't be filleted."""
-    bb = edge.boundingBox
-    return abs(bb.maxPoint.z - bb.minPoint.z) < 1e-4
+def flat_in(axis):
+    """Edge filter: edges lying flat on a face square to `axis`. Use for
+    outlines with smooth (tangent) joins, whose straight-through edges
+    can't be filleted."""
+    def f(edge):
+        bb = edge.boundingBox
+        lo = {'x': bb.minPoint.x, 'y': bb.minPoint.y, 'z': bb.minPoint.z}[axis]
+        hi = {'x': bb.maxPoint.x, 'y': bb.maxPoint.y, 'z': bb.maxPoint.z}[axis]
+        return abs(hi - lo) < 1e-4
+    return f
 
 
 def new_component(root, name):
@@ -579,8 +695,15 @@ def new_component(root, name):
     return occ.component
 
 
-def first_body(comp):
-    return comp.bRepBodies.item(0)
+def bodies(comp):
+    return [comp.bRepBodies.item(i) for i in range(comp.bRepBodies.count)]
+
+
+def body_named(comp, name):
+    for b in bodies(comp):
+        if b.name == name:
+            return b
+    raise RuntimeError('Body "{}" not found'.format(name))
 
 
 NEW = adsk.fusion.FeatureOperations.NewBodyFeatureOperation
@@ -597,55 +720,50 @@ def build_slide(root):
     sk = side_sketch(comp, 'Slide profile', [slide_outline()])
     slide = extrude_sym(comp, pick_profile(sk), 'slide_width', NEW, name='Slide').bodies.item(0)
     fillet(comp, slide, FILLET_SLIDE, 'Slide')
-    slide = first_body(comp)
 
-    # Rear sight: a block with a notch cut down the middle -> two "ears"
-    sk = side_sketch(comp, 'Rear sight profile', [rear_sight_outline()])
-    sight = extrude_sym(comp, pick_profile(sk), 'slide_width - 8 mm', NEW, name='Rear sight').bodies.item(0)
-    notch_x = REAR_SIGHT_X + REAR_SIGHT_LEN / 2.0
-    pl = offset_plane(comp, comp.yZConstructionPlane, notch_x, 'x', notch_x)
-    nsk = comp.sketches.add(pl)
-    nsk.name = 'Rear sight notch'
-    half = REAR_SIGHT_NOTCH / 2.0
-    y0, y1 = SLIDE_H + 0.5, SLIDE_H + REAR_SIGHT_H + 5
-    draw_loops(nsk, [polygon([(-half, y0), (half, y0), (half, y1), (-half, y1)])],
-               lambda p: (notch_x, p[1], p[0]))
-    extrude_sym(comp, pick_profile(nsk), REAR_SIGHT_LEN * 3, CUT, participants=[sight])
-    combine_join(comp, slide, [b for b in _bodies(comp) if b.name != 'Slide'])
-    slide = first_body(comp)
+    # Cat ears: a wedge with a notch cut down the middle
+    sk = side_sketch(comp, 'Ears profile', [ears_outline()])
+    ears = extrude_sym(comp, pick_profile(sk), 'slide_width - 4 mm', NEW, name='Ears').bodies.item(0)
+    sk = front_sketch(comp, 'Ears notch', [polygon([
+        (-EARS_GAP / 2, SLIDE_H + 0.5), (EARS_GAP / 2, SLIDE_H + 0.5),
+        (EARS_GAP / 2, SLIDE_H + EARS_H + 5), (-EARS_GAP / 2, SLIDE_H + EARS_H + 5)])],
+        EARS_X0 + EARS_LEN / 2)
+    extrude_sym(comp, pick_profile(sk), EARS_LEN * 3, CUT, participants=[ears])
+    fillet(comp, body_named(comp, 'Ears'), 0.6, 'Ears', edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H + 0.2)
+    slide = body_named(comp, 'Slide')
+    combine_join(comp, slide, [b for b in bodies(comp) if b.name != 'Slide'])
+    slide = body_named(comp, 'Slide')
 
     # Slanted grooves on both sides
     for side, label in ((1, 'right'), (-1, 'left')):
         expr = 'slide_width / 2' if side > 0 else '-slide_width / 2'
         pl = offset_plane(comp, comp.xYConstructionPlane, expr, 'z', side * 14.0)
-        sk = comp.sketches.add(pl)
-        sk.name = 'Serrations ({})'.format(label)
-        draw_loops(sk, serration_outlines(), lambda p: (p[0], p[1], 0.0))
+        sk = side_sketch(comp, 'Grooves ({})'.format(label), serration_outlines(), plane=pl)
         try:
             extrude_sym(comp, all_profiles(sk), 'serration_depth * 2', CUT, participants=[slide])
         except Exception:
-            _skipped.append('Slide: {} serrations skipped'.format(label))
+            _skipped.append('Slide: {} grooves skipped'.format(label))
     return comp
-
-
-def _bodies(comp):
-    return [comp.bRepBodies.item(i) for i in range(comp.bRepBodies.count)]
 
 
 def build_muzzle(root):
     comp = new_component(root, 'Muzzle & Shroud')
-    sk = side_sketch(comp, 'Muzzle half-section', [muzzle_half_section()])
-    axis = sk.sketchCurves.sketchLines.item(0)   # first segment = the bore axis
-    revs = comp.features.revolveFeatures
-    inp = revs.createInput(pick_profile(sk), axis, NEW)
-    inp.setAngleExtent(False, adsk.core.ValueInput.createByString('360 deg'))
-    muzzle = revs.add(inp).bodies.item(0)
-    muzzle.name = 'Muzzle'
+    revolve_new(comp, side_sketch(comp, 'Barrel half-section', [barrel_half_section()]), 'Barrel')
+    revolve_new(comp, side_sketch(comp, 'Muzzle lip half-section', [muzzle_lip_half_section()]),
+                'Muzzle lip')
 
-    sk = side_sketch(comp, 'Front sight ring', front_sight_loops())
-    extrude_sym(comp, pick_profile(sk, loops=2), 'sight_thickness', JOIN, participants=[muzzle])
-    fillet(comp, first_body(comp), FILLET_SMALL, 'Front sight',
-           edge_filter=lambda e: e.boundingBox.maxPoint.y * 10 > BORE_AXIS_Y + MUZZLE_R + 0.5)
+    # Heart flange (the shroud) with its cream inset and the front sight ring
+    mid = FLANGE_X + FLANGE_T / 2.0
+    sk = front_sketch(comp, 'Heart flange', flange_loops(), mid)
+    flange = extrude_sym(comp, pick_profile(sk), 'flange_width', NEW, name='Heart flange').bodies.item(0)
+    fillet(comp, flange, 1.5, 'Heart flange', edge_filter=flat_in('x'))
+    sk = front_sketch(comp, 'Front sight ring', front_sight_loops(), mid)
+    flange = body_named(comp, 'Heart flange')
+    extrude_sym(comp, pick_profile(sk, loops=2), 'sight_thickness', JOIN, participants=[flange])
+    front = FLANGE_X + FLANGE_T
+    sk = front_sketch(comp, 'Flange inset', flange_inset_loops(), front)
+    extrude_sym(comp, pick_profile(sk), 'inset_proud * 2', NEW, name='Flange inset')
+    fillet(comp, body_named(comp, 'Flange inset'), 0.6, 'Flange inset', edge_filter=flat_in('x'))
     return comp
 
 
@@ -655,12 +773,11 @@ def build_frame(root):
     sk = side_sketch(comp, 'Frame profile', [frame_outline()])
     frame = extrude_sym(comp, pick_profile(sk), 'frame_width', NEW, name='Frame').bodies.item(0)
     fillet(comp, frame, FILLET_FRAME, 'Frame')
-    frame = first_body(comp)
 
-    sk = side_sketch(comp, 'Grip profile', [grip_outline()])
-    grip = extrude_sym(comp, pick_profile(sk), 'grip_width', NEW, name='Grip').bodies.item(0)
-    top_cut = (-FRAME_H + 5.0) / 10.0     # leave the edges hidden inside the frame sharp
-    fillet(comp, grip, FILLET_GRIP, 'Grip', edge_filter=lambda e: e.boundingBox.minPoint.y < top_cut)
+    sk = side_sketch(comp, 'Grip back profile', [spine_outline()])
+    spine = extrude_sym(comp, pick_profile(sk), 'spine_width', NEW, name='Spine').bodies.item(0)
+    fillet(comp, spine, FILLET_SPINE, 'Grip back piece',
+           edge_filter=lambda e: e.boundingBox.minPoint.y * 10 < -FRAME_H - 2)
 
     sk = side_sketch(comp, 'Trigger guard profile', guard_loops())
     guard = extrude_sym(comp, pick_profile(sk, loops=2), 'guard_width', NEW, name='Guard').bodies.item(0)
@@ -672,17 +789,26 @@ def build_frame(root):
     sk = side_sketch(comp, 'Charm eyelet tab', [tab])
     extrude_sym(comp, pick_profile(sk), 'eyelet_thickness', NEW, name='Eyelet tab')
 
-    frame = [b for b in _bodies(comp) if b.name == 'Frame'][0]
-    combine_join(comp, frame, [b for b in _bodies(comp) if b.name != 'Frame'])
-    frame = first_body(comp)
+    frame = body_named(comp, 'Frame')
+    combine_join(comp, frame, [b for b in bodies(comp) if b.name != 'Frame'])
+    frame = body_named(comp, 'Frame')
     frame.name = 'Frame & Grip'
 
-    # Readout window recess on the left side (-Z)
-    pl = offset_plane(comp, comp.xYConstructionPlane, '-frame_width / 2', 'z', -12.0)
-    sk = comp.sketches.add(pl)
-    sk.name = 'Readout window'
-    draw_loops(sk, [readout_outline()], lambda p: (p[0], p[1], 0.0))
+    # Readout window recess on the left side (+Z after mirroring)
+    pl = offset_plane(comp, comp.xYConstructionPlane, 'frame_width / 2', 'z', 11.0)
+    sk = side_sketch(comp, 'Readout window', [readout_outline()], plane=pl)
     extrude_sym(comp, pick_profile(sk), 'readout_depth * 2', CUT, participants=[frame])
+    return comp
+
+
+def build_panel(root):
+    comp = new_component(root, 'Grip Panel')
+    sk = side_sketch(comp, 'Grip panel profile', [panel_outline()])
+    panel = extrude_sym(comp, pick_profile(sk), 'panel_width', NEW, name='Grip panel').bodies.item(0)
+    fillet(comp, panel, FILLET_PANEL, 'Grip panel',
+           edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.y * 10 < -FRAME_H - 1)
+    sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
+    extrude_sym(comp, pick_profile(sk), 'panel_width + 2 mm', NEW, name='Grip pin')
     return comp
 
 
@@ -699,9 +825,7 @@ def build_button(root):
     comp = new_component(root, 'Top Button')
     sk = side_sketch(comp, 'Button profile', [button_outline()])
     body = extrude_sym(comp, pick_profile(sk), 'button_width', NEW, name='Top button').bodies.item(0)
-    base = SLIDE_H / 10.0 + 0.05
-    fillet(comp, body, FILLET_SMALL, 'Top button',
-           edge_filter=lambda e: on_side_face(e) and e.boundingBox.maxPoint.y > base)
+    fillet(comp, body, 2.0, 'Top button', edge_filter=flat_in('z'))
     return comp
 
 
@@ -709,13 +833,16 @@ def build_rear_cap(root):
     comp = new_component(root, 'Rear Cap (Heart)')
     sk = side_sketch(comp, 'Heart profile', [cap_outline()])
     cap = extrude_sym(comp, pick_profile(sk), 'cap_width', NEW, name='Heart cap').bodies.item(0)
-    fillet(comp, cap, FILLET_CAP, 'Heart cap', edge_filter=on_side_face)
+    fillet(comp, cap, FILLET_CAP, 'Heart cap', edge_filter=flat_in('z'))
     if INCLUDE_GRIP_LOOP:
-        cap = first_body(comp)
         sk = side_sketch(comp, 'Grip loop profile', [grip_loop_outline()])
         loop = extrude_sym(comp, pick_profile(sk), 'loop_width', NEW, name='Grip loop').bodies.item(0)
         fillet(comp, loop, 2.5, 'Grip loop')
-        combine_join(comp, cap, [b for b in _bodies(comp) if b.name != 'Heart cap'])
+        cap = body_named(comp, 'Heart cap')
+        combine_join(comp, cap, [body_named(comp, 'Grip loop')])
+    sk = side_sketch(comp, 'Heart inset', [cap_inset_outline()])
+    extrude_sym(comp, pick_profile(sk), 'cap_width + inset_proud * 2', NEW, name='Heart inset')
+    fillet(comp, body_named(comp, 'Heart inset'), 1.0, 'Heart inset', edge_filter=flat_in('z'))
     return comp
 
 
@@ -723,7 +850,11 @@ def build_charm(root):
     comp = new_component(root, 'Charm')
     sk = side_sketch(comp, 'Charm profile', charm_loops())
     body = extrude_sym(comp, pick_profile(sk, loops=2), 'charm_thickness', NEW, name='Charm').bodies.item(0)
-    fillet(comp, body, FILLET_SMALL, 'Charm', edge_filter=on_side_face)
+    fillet(comp, body, FILLET_SMALL, 'Charm', edge_filter=lambda e: flat_in('z')(e)
+           and e.boundingBox.maxPoint.x - e.boundingBox.minPoint.x > 0.45)   # skip the keyhole
+    sk = side_sketch(comp, 'Charm bail', charm_bail_loops())
+    extrude_sym(comp, pick_profile(sk, loops=2), 'charm_thickness / 2', JOIN,
+                participants=[body_named(comp, 'Charm')])
     return comp
 
 
@@ -747,18 +878,21 @@ def apply_colors(app, design, comps):
                 break
         if base is None:
             return
+        made = {}
         for comp in comps:
-            rgb = COLORS.get(comp.name)
-            if not rgb:
-                continue
-            ap = design.appearances.addByCopy(base, 'Celestia ' + comp.name)
-            for k in range(ap.appearanceProperties.count):
-                prop = adsk.core.ColorProperty.cast(ap.appearanceProperties.item(k))
-                if prop:
-                    prop.value = adsk.core.Color.create(rgb[0], rgb[1], rgb[2], 255)
-                    break
-            for b in _bodies(comp):
-                b.appearance = ap
+            for b in bodies(comp):
+                rgb = BODY_COLORS.get(b.name)
+                if not rgb:
+                    continue
+                if rgb not in made:
+                    ap = design.appearances.addByCopy(base, 'Celestia {} {} {}'.format(*rgb))
+                    for k in range(ap.appearanceProperties.count):
+                        prop = adsk.core.ColorProperty.cast(ap.appearanceProperties.item(k))
+                        if prop:
+                            prop.value = adsk.core.Color.create(rgb[0], rgb[1], rgb[2], 255)
+                            break
+                    made[rgb] = ap
+                b.appearance = made[rgb]
     except Exception:
         _skipped.append('Colours skipped (appearance library unavailable)')
 
@@ -786,9 +920,9 @@ def run(context):
 
         comps = []
         for label, builder in (('Slide', build_slide), ('Muzzle & Shroud', build_muzzle),
-                               ('Frame & Grip', build_frame), ('Trigger', build_trigger),
-                               ('Top Button', build_button), ('Rear Cap (Heart)', build_rear_cap),
-                               ('Charm', build_charm)):
+                               ('Frame & Grip', build_frame), ('Grip Panel', build_panel),
+                               ('Trigger', build_trigger), ('Top Button', build_button),
+                               ('Rear Cap (Heart)', build_rear_cap), ('Charm', build_charm)):
             try:
                 comps.append(builder(root))
             except Exception:
