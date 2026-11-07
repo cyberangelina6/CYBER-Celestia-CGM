@@ -779,7 +779,6 @@ def run(context):
         design.designType = adsk.fusion.DesignTypes.ParametricDesignType
         design.fusionUnitsManager.distanceDisplayUnits = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
         root = design.rootComponent
-        root.name = 'CYBER Celestia CGM'
 
         for name, value, comment in LIVE_PARAMS:
             design.userParameters.add(name, adsk.core.ValueInput.createByString('{} mm'.format(value)),
