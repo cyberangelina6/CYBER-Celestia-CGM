@@ -97,10 +97,15 @@ SPINE_FRONT_TOP_X = 14.0    # colour seam (light/dark) at the frame bottom
 SPINE_FRONT_RAKE = 24.0
 # Front edge of the panel: a smooth curve through these points, top to bottom
 PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0, -63.0)]
-PANEL_TOE_MID = (29.0, -69.0)   # rounded bottom-front corner
-PANEL_BOTTOM = (22.0, -71.5)    # where the flat base starts
-GRIP_BASE_TILT_DEG = 6.0        # base rises this much toward the back
-GRIP_HEEL_R = 12.0              # rounding of the bottom-back corner
+# Round base: the curve carries on from the front edge through these points,
+# front to back, and finishes on the back edge at GRIP_BASE_END_Y.
+GRIP_BASE = [(29.5, -68.5), (21.0, -72.5), (6.0, -73.0), (-9.0, -70.5), (-20.0, -65.0), (-25.0, -57.5)]
+GRIP_BASE_END_Y = -50.0
+# The light-pink back piece stops above the base in a rounded end; the dark
+# panel wraps the whole base. Both come from one body, so they are flush.
+SPINE_END_Y = -52.0             # where the seam leaves the front edge line
+SPINE_END_REAR_Y = -44.0        # where the rounded end meets the back edge
+SPINE_END_BULGE = 5.0           # roundness of the light pink's end
 GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
 GRIP_PIN_R = 2.2
 
@@ -136,7 +141,7 @@ CHARM_W = 19.0
 # Fillet radii (if a fillet fails, the script skips it and tells you)
 FILLET_SLIDE = 2.0
 FILLET_FRAME = 1.5
-FILLET_GRIP = 5.0
+FILLET_GRIP = 8.0               # big, so the grip and base are round
 FILLET_GUARD = 2.0
 FILLET_SMALL = 1.0
 
@@ -381,50 +386,39 @@ def _unit(v):
     return (v[0] / n, v[1] / n)
 
 
-def round_corner(corner, a_dir, b_dir, radius):
-    """Arc of the given radius tangent to two edges leaving `corner` along
-    unit vectors a_dir and b_dir. Returns (start, mid, end) on a then b."""
-    half = math.acos(a_dir[0] * b_dir[0] + a_dir[1] * b_dir[1]) / 2.0
-    dist = radius / math.tan(half)
-    bis = _unit((a_dir[0] + b_dir[0], a_dir[1] + b_dir[1]))
-    centre_d = radius / math.sin(half)
-    t1 = (corner[0] + a_dir[0] * dist, corner[1] + a_dir[1] * dist)
-    t2 = (corner[0] + b_dir[0] * dist, corner[1] + b_dir[1] * dist)
-    mid = (corner[0] + bis[0] * (centre_d - radius), corner[1] + bis[1] * (centre_d - radius))
-    return t1, mid, t2
-
-
-def grip_heel():
-    """Rounded corner where the flat base meets the back of the grip."""
-    t = math.radians(GRIP_BASE_TILT_DEG)
-    d = (-math.cos(t), math.sin(t))                 # along the base, toward the back
-    k = math.tan(math.radians(SPINE_REAR_RAKE))     # back edge: x = SPINE_REAR_TOP_X + k*y
-    p = PANEL_BOTTOM
-    s = (SPINE_REAR_TOP_X + k * p[1] - p[0]) / (d[0] - k * d[1])
-    corner = (p[0] + s * d[0], p[1] + s * d[1])
-    return round_corner(corner, (-d[0], -d[1]), _unit((k, 1.0)), GRIP_HEEL_R)
-
-
 def grip_outline():
     """Whole grip (back piece + panel) as one outline."""
     top = -4.0
     rear_top = (spine_rear_x(top), top)
-    h1, hm, h2 = grip_heel()
+    base_end = (spine_rear_x(GRIP_BASE_END_Y), GRIP_BASE_END_Y)
     return [
         ('line', rear_top, (FRAME_REAR_X, top)),
         ('line', (FRAME_REAR_X, top), (FRAME_REAR_X, PANEL_FRONT[0][1])),
         ('line', (FRAME_REAR_X, PANEL_FRONT[0][1]), PANEL_FRONT[0]),
-        ('spline',) + tuple(PANEL_FRONT),
-        ('arc', PANEL_FRONT[-1], PANEL_TOE_MID, PANEL_BOTTOM),
-        ('line', PANEL_BOTTOM, h1),
-        ('arc', h1, hm, h2),
-        ('line', h2, rear_top),
+        # front edge and round base as one smooth curve
+        ('spline',) + tuple(PANEL_FRONT) + tuple(GRIP_BASE) + (base_end,),
+        ('line', base_end, rear_top),
     ]
 
 
+def _bulge_mid(p0, p1, bulge):
+    """Middle point for an arc from p0 to p1 that bows `bulge` mm to the
+    right of the direction p0 -> p1 (downward for a base drawn front to back)."""
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    n = math.hypot(dx, dy)
+    return ((p0[0] + p1[0]) / 2 - bulge * dy / n, (p0[1] + p1[1]) / 2 + bulge * dx / n)
+
+
 def grip_seam():
-    """Line splitting the grip into the light back piece and the dark panel."""
-    return ((spine_front_x(0.0), 0.0), (spine_front_x(-85.0), -85.0))
+    """Open chain splitting the grip: down the light piece's front edge, then
+    a rounded end curving out through the back edge, above the base."""
+    top = (spine_front_x(0.0), 0.0)
+    s1 = (spine_front_x(SPINE_END_Y), SPINE_END_Y)
+    e = (spine_rear_x(SPINE_END_REAR_Y), SPINE_END_REAR_Y)
+    out = (e[0] - 12.0, e[1] + 4.0)       # carry on past the back of the grip
+    return [('line', top, s1),
+            ('arc', s1, _bulge_mid(s1, e, SPINE_END_BULGE), e),
+            ('line', e, out)]
 
 
 def guard_loops():
@@ -899,8 +893,8 @@ def split_grip(comp):
     """Split the 'Grip' body along the colour seam into 'Spine' (back) and
     'Grip panel' (front)."""
     grip = body_named(comp, 'Grip')
-    sk = side_sketch(comp, 'Grip seam', [[('line',) + grip_seam()]])
-    prof = comp.createOpenProfile(sk.sketchCurves.sketchLines.item(0), False)
+    sk = side_sketch(comp, 'Grip seam', [grip_seam()])
+    prof = comp.createOpenProfile(sk.sketchCurves.sketchLines.item(0), True)
     ext = comp.features.extrudeFeatures
     inp = ext.createInput(prof, NEW)
     inp.isSolid = False
