@@ -106,6 +106,7 @@ def rect(x0, y0, x1, y1):
 fig = plt.figure(figsize=(16, 9))
 ax = fig.add_axes([0.03, 0.06, 0.62, 0.88])
 axf = fig.add_axes([0.67, 0.50, 0.14, 0.42])
+axg = fig.add_axes([0.84, 0.50, 0.12, 0.42])
 axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
 
 # ---- Left side view (back to front, roughly how parts overlap) ----
@@ -194,6 +195,25 @@ axf.set_xlim(-30, 30)
 axf.set_ylim(-15, 45)
 axf.grid(True, color='#eee', zorder=-1)
 axf.set_title('Muzzle from the front')
+
+# ---- Grip seen from the front: light pink stands proud, flush at the base ----
+P = {n: v for n, v, _ in cgm.LIVE_PARAMS}
+half_full = P['grip_width'] / 2 + P['spine_proud']
+base_y = min(p[1] for p in cgm.GRIP_BASE)
+grip_rect = rect(-half_full, base_y, half_full, -cgm.FRAME_H)
+draw(axg, [grip_rect], C['Frame & Grip'], 1)
+dark = PathPatch(compound([grip_rect]), facecolor=tuple(c / 255 for c in C['Grip panel']),
+                 edgecolor='none', zorder=2)
+axg.add_patch(dark)
+dark.set_clip_path(PathPatch(compound([cgm.panel_taper_loop(P['grip_width'], P['spine_proud'])]),
+                             transform=axg.transData))
+axg.axhline(cgm.SPINE_FLUSH_Y, color='#5b1d5e', lw=0.6, ls='--')
+axg.text(0, cgm.SPINE_FLUSH_Y - 3, 'flush', ha='center', va='top', fontsize=8, color='#3b0f3d')
+axg.set_aspect('equal')
+axg.set_xlim(-25, 25)
+axg.set_ylim(base_y - 5, -5)
+axg.grid(True, color='#eee', zorder=-1)
+axg.set_title('Grip from the front')
 
 # ---- The concept sketch ----
 try:

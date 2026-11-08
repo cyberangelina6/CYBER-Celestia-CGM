@@ -101,11 +101,10 @@ PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0
 # front to back, and finishes on the back edge at GRIP_BASE_END_Y.
 GRIP_BASE = [(29.5, -68.5), (21.0, -72.5), (6.0, -73.0), (-9.0, -70.5), (-20.0, -65.0), (-25.0, -57.5)]
 GRIP_BASE_END_Y = -50.0
-# The light-pink back piece stops above the base in a rounded end; the dark
-# panel wraps the whole base. Both come from one body, so they are flush.
-SPINE_END_Y = -52.0             # where the seam leaves the front edge line
-SPINE_END_REAR_Y = -44.0        # where the rounded end meets the back edge
-SPINE_END_BULGE = 5.0           # roundness of the light pink's end
+# The light-pink back piece runs all the way down. It stands proud of the
+# dark panel (spine_proud per side) and blends down to flush at the base.
+SPINE_FADE_START_Y = -40.0      # the panel starts blending out here...
+SPINE_FLUSH_Y = -62.0           # ...and is flush with the light pink here
 GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
 GRIP_PIN_R = 2.2
 
@@ -149,7 +148,8 @@ FILLET_SMALL = 1.0
 LIVE_PARAMS = [
     ('slide_width', 28.0, 'Slide thickness, side to side'),
     ('frame_width', 22.0, 'Frame thickness, side to side'),
-    ('grip_width', 30.0, 'Grip thickness, side to side'),
+    ('grip_width', 30.0, 'Grip panel (dark pink) thickness, side to side'),
+    ('spine_proud', 2.0, 'How far the light pink stands out each side'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
     ('button_width', 9.0, 'Top button width'),
@@ -401,24 +401,21 @@ def grip_outline():
     ]
 
 
-def _bulge_mid(p0, p1, bulge):
-    """Middle point for an arc from p0 to p1 that bows `bulge` mm to the
-    right of the direction p0 -> p1 (downward for a base drawn front to back)."""
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    n = math.hypot(dx, dy)
-    return ((p0[0] + p1[0]) / 2 - bulge * dy / n, (p0[1] + p1[1]) / 2 + bulge * dx / n)
-
-
 def grip_seam():
-    """Open chain splitting the grip: down the light piece's front edge, then
-    a rounded end curving out through the back edge, above the base."""
-    top = (spine_front_x(0.0), 0.0)
-    s1 = (spine_front_x(SPINE_END_Y), SPINE_END_Y)
-    e = (spine_rear_x(SPINE_END_REAR_Y), SPINE_END_REAR_Y)
-    out = (e[0] - 12.0, e[1] + 4.0)       # carry on past the back of the grip
-    return [('line', top, s1),
-            ('arc', s1, _bulge_mid(s1, e, SPINE_END_BULGE), e),
-            ('line', e, out)]
+    """Line splitting the grip into the light back piece and the dark panel,
+    running right through the base."""
+    return [('line', (spine_front_x(0.0), 0.0), (spine_front_x(-90.0), -90.0))]
+
+
+def panel_taper_loop(grip_w, proud):
+    """Front-view (u = across, v = height) shape the panel is trimmed to:
+    grip_w wide up high, widening to grip_w + 2*proud (flush with the light
+    pink) at SPINE_FLUSH_Y and staying full width below that."""
+    w, full = grip_w / 2.0, grip_w / 2.0 + proud + 1.0
+    y0 = SPINE_FADE_START_Y
+    y1 = y0 + 1.5 * (SPINE_FLUSH_Y - y0)   # reaches full+1 here, flush 2/3 of the way
+    return polygon([(-w, 20.0), (w, 20.0), (w, y0), (full, y1), (full, -130.0),
+                    (-full, -130.0), (-full, y1), (-w, y0)])
 
 
 def guard_loops():
@@ -856,13 +853,16 @@ def build_frame(root):
     frame = extrude_sym(comp, pick_profile(sk), 'frame_width', NEW, name='Frame').bodies.item(0)
     fillet(comp, frame, FILLET_FRAME, 'Frame')
 
-    # Grip: one body with a rounded base, then split into two colours so
-    # the back piece and the panel sit perfectly flush.
+    # Grip: one body with a round base, split into two colours. The dark
+    # panel is then trimmed so the light pink stands proud of it, blending
+    # back to flush at the base.
     sk = side_sketch(comp, 'Grip profile', [grip_outline()])
-    grip = extrude_sym(comp, pick_profile(sk), 'grip_width', NEW, name='Grip').bodies.item(0)
+    grip = extrude_sym(comp, pick_profile(sk), 'grip_width + spine_proud * 2', NEW,
+                       name='Grip').bodies.item(0)
     fillet(comp, grip, FILLET_GRIP, 'Grip',
            edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.y * 10 < -FRAME_H - 1)
     split_grip(comp)
+    taper_panel(comp)
     sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
     extrude_sym(comp, pick_profile(sk), 'grip_width + 2 mm', NEW, name='Grip pin')
 
@@ -914,6 +914,47 @@ def split_grip(comp):
     halves.sort(key=reach)
     halves[0].name = 'Spine'
     halves[-1].name = 'Grip panel'
+
+
+def taper_panel(comp):
+    """Trim the panel's sides so it sits lower than the light pink, blending
+    to flush at the base, then soften the new edges."""
+    params = {n: v for n, v, _ in LIVE_PARAMS}
+    sk = front_sketch(comp, 'Panel taper', [panel_taper_loop(params['grip_width'], params['spine_proud'])],
+                      10.0)
+    panel = body_named(comp, 'Grip panel')
+    try:
+        extrude_sym(comp, pick_profile(sk), 200.0, adsk.fusion.FeatureOperations.IntersectFeatureOperation,
+                    participants=[panel])
+    except Exception:
+        _skipped.append('Grip: could not lower the dark panel, so it is flush with the light pink')
+        return
+    panel = body_named(comp, 'Grip panel')
+    fillet(comp, panel, 1.5, 'Grip panel edges',
+           edge_filter=lambda e: is_sharp(e) and not on_seam(e)
+           and e.boundingBox.maxPoint.y * 10 < -FRAME_H - 1)
+
+
+def is_sharp(edge, min_deg=10.0):
+    """True if the two faces meet at a real corner (not a smooth join)."""
+    try:
+        if edge.faces.count != 2:
+            return False
+        p = edge.pointOnEdge
+        ok1, n1 = edge.faces.item(0).evaluator.getNormalAtPoint(p)
+        ok2, n2 = edge.faces.item(1).evaluator.getNormalAtPoint(p)
+        return ok1 and ok2 and n1.angleTo(n2) > math.radians(min_deg)
+    except Exception:
+        return False
+
+
+def on_seam(edge):
+    """True if both ends of the edge lie on the light/dark seam."""
+    for v in (edge.startVertex, edge.endVertex):
+        g = v.geometry
+        if abs(X_SIGN * g.x * 10 - spine_front_x(g.y * 10)) > 0.05:
+            return False
+    return True
 
 
 def build_trigger(root):
