@@ -43,10 +43,11 @@ import adsk.fusion
 # Slide: a parallelogram whose front and rear ends lean forward at the top
 SLIDE_LEN = 134.0           # along the bottom edge
 SLIDE_H = 32.0
-# Seen from the front the slide is narrow on top and wide at the bottom, so
-# its dark magenta sides show as angled "wings".
-SLIDE_BOTTOM_W = 60.0       # width where the slide sits on the frame
-SLIDE_SIDE_ANGLE = 30.0     # lean of the sides from vertical (bigger = more angled)
+# Seen from the front the slide's sides go straight down from the top, then
+# lean out below WING_TOP_Y, so the lower part shows as angled "wings".
+SLIDE_TOP_W = 24.0          # width of the straight upper part
+WING_TOP_Y = 16.0           # where the sides start leaning out
+SLIDE_SIDE_ANGLE = 30.0     # lean of the wings from vertical (bigger = more angled)
 SLIDE_FRONT_LEAN = 10.0     # top of the front face sits this far forward
 SLIDE_FRONT_BEVEL = 6.0     # bevel on the top-front corner
 SLIDE_REAR_LEAN = 24.0      # top of the rear face sits this far forward
@@ -180,15 +181,16 @@ LIVE_PARAMS = [
 
 # Colours from the sketch (R, G, B), by body name
 CREAM = (252, 240, 185)
+GRIP_PINK = (238, 112, 190)   # the grip panel; barrel and shroud match it
 BODY_COLORS = {
     'Slide': (232, 72, 170),
-    'Barrel': (246, 160, 210),
+    'Barrel': GRIP_PINK,
     'Muzzle lip': (255, 180, 206),
     'Sight bead': (250, 206, 245),
-    'Heart flange': (247, 140, 210),
+    'Heart flange': GRIP_PINK,
     'Flange inset': CREAM,
     'Frame & Grip': (250, 190, 228),
-    'Grip panel': (238, 112, 190),
+    'Grip panel': GRIP_PINK,
     'Grip pin': (190, 45, 135),
     'Trigger': (200, 70, 160),
     'Top button': (225, 60, 150),
@@ -343,9 +345,11 @@ def ears_outline():
 
 
 def serration_outlines():
-    y0, y1 = 5.0, SLIDE_H - 5.0
+    """Slanted grooves on the straight upper part of the slide's sides."""
+    y0, y1 = WING_TOP_Y + 1.0, SLIDE_H - TOP_STRIP_H - 1.0
+    lean = SERRATION_LEAN * (y1 - y0) / (SLIDE_H - 10.0)
     return [polygon([(x, y0), (x + SERRATION_W, y0),
-                     (x + SERRATION_W + SERRATION_LEAN, y1), (x + SERRATION_LEAN, y1)])
+                     (x + SERRATION_W + lean, y1), (x + lean, y1)])
             for x in SERRATION_XS]
 
 
@@ -362,18 +366,21 @@ def button_outline():
 
 
 def slide_half_width(y):
-    """Half the slide's width at height y (sides lean in toward the top)."""
-    return SLIDE_BOTTOM_W / 2.0 - y * math.tan(math.radians(SLIDE_SIDE_ANGLE))
+    """Half the slide's width at height y: straight above WING_TOP_Y,
+    leaning out below it."""
+    return SLIDE_TOP_W / 2.0 + max(WING_TOP_Y - y, 0.0) * math.tan(math.radians(SLIDE_SIDE_ANGLE))
 
 
-SLIDE_TOP_W = 2.0 * slide_half_width(SLIDE_H)
+SLIDE_BOTTOM_W = 2.0 * slide_half_width(0.0)
 
 
 def slide_section():
-    """Front-view (u, v) trapezoid the slide and top strip are trimmed to."""
+    """Front-view (u, v) shape the slide and top strip are trimmed to."""
     lo, hi = -1.5, SLIDE_H + 1.0
+    w = WING_TOP_Y
     return polygon([(-slide_half_width(lo), lo), (slide_half_width(lo), lo),
-                    (slide_half_width(hi), hi), (-slide_half_width(hi), hi)])
+                    (slide_half_width(w), w), (slide_half_width(hi), hi),
+                    (-slide_half_width(hi), hi), (-slide_half_width(w), w)])
 
 
 def frame_band_half_width(y):
@@ -915,7 +922,7 @@ def build_slide(root):
 
     # Slanted grooves, sketched right on each leaning side face
     for side, label in ((1, 'left'), (-1, 'right')):
-        face = side_face(slide, side, 0.0, SLIDE_H)
+        face = side_face(slide, side, WING_TOP_Y, SLIDE_H)
         if face is None:
             _skipped.append('Slide: {} grooves skipped (side face not found)'.format(label))
             continue
