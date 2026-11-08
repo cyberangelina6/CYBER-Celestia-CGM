@@ -106,7 +106,7 @@ def rect(x0, y0, x1, y1):
 fig = plt.figure(figsize=(16, 9))
 ax = fig.add_axes([0.03, 0.06, 0.62, 0.88])
 axf = fig.add_axes([0.67, 0.50, 0.14, 0.42])
-axg = fig.add_axes([0.84, 0.50, 0.12, 0.42])
+axg = fig.add_axes([0.83, 0.55, 0.16, 0.30])
 axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
 
 # ---- Left side view (back to front, roughly how parts overlap) ----
@@ -114,18 +114,41 @@ y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
 if cgm.INCLUDE_GRIP_LOOP:
     draw(ax, [cgm.grip_loop_outline()], C['Heart cap'], 1)
 draw(ax, cgm.guard_loops(), C['Frame & Grip'], 2.5)
-grip = PathPatch(compound([cgm.grip_outline()]), facecolor=tuple(c / 255 for c in C['Frame & Grip']),
-                 edgecolor='#5b1d5e', lw=1.3, zorder=3)
-ax.add_patch(grip)
+def grip_side_silhouette():
+    """Grip outline above GRIP_CUT_Y plus the blend down to the oval base."""
+    v = loop_vertices(cgm.grip_outline())
+    cut = cgm.GRIP_CUT_Y
+    above = []
+    hits = []
+    for i in range(len(v)):
+        p, q = v[i - 1], v[i]
+        if (p[1] - cut) * (q[1] - cut) < 0:
+            t = (cut - p[1]) / (q[1] - p[1])
+            hits.append((p[0] + t * (q[0] - p[0]), cut))
+            above.append(hits[-1])
+        if q[1] >= cut:
+            above.append(q)
+    xf, xb = max(h[0] for h in hits), min(h[0] for h in hits)
+    bf = cgm.BASE_CENTER_X + cgm.BASE_LENGTH / 2
+    bb = cgm.BASE_CENTER_X - cgm.BASE_LENGTH / 2
+    # replace the straight cut with the blend: front corner -> base -> back corner
+    i = above.index((xf, cut))
+    j = above.index((xb, cut))
+    if i < j:
+        return above[:i + 1] + [(bf, cgm.GRIP_BASE_Y), (bb, cgm.GRIP_BASE_Y)] + above[j:]
+    return above[:j + 1] + [(bb, cgm.GRIP_BASE_Y), (bf, cgm.GRIP_BASE_Y)] + above[i:]
+
+
+grip_poly = Path(grip_side_silhouette() + [grip_side_silhouette()[0]])
+ax.add_patch(PathPatch(grip_poly, facecolor=tuple(c / 255 for c in C['Frame & Grip']), edgecolor='none', zorder=3))
 seam_pts = loop_vertices(cgm.grip_seam())
 front_of_seam = Path(seam_pts + [(seam_pts[-1][0], -150), (250, -150), (250, seam_pts[0][1]), seam_pts[0]])
-panel = PathPatch(compound([cgm.grip_outline()]), facecolor=tuple(c / 255 for c in C['Grip panel']),
-                  edgecolor='#5b1d5e', lw=1.3, zorder=3.1)
+panel = PathPatch(grip_poly, facecolor=tuple(c / 255 for c in C['Grip panel']), edgecolor='none', zorder=3.1)
 ax.add_patch(panel)
 panel.set_clip_path(PathPatch(front_of_seam, transform=ax.transData))
 seam_line, = ax.plot([p[0] for p in seam_pts], [p[1] for p in seam_pts], color='#5b1d5e', lw=1.0, zorder=3.15)
-seam_line.set_clip_path(PathPatch(compound([cgm.grip_outline()]), transform=ax.transData))
-ax.add_patch(PathPatch(compound([cgm.grip_outline()]), fill=False, edgecolor='#5b1d5e', lw=1.3, zorder=3.2))
+seam_line.set_clip_path(PathPatch(grip_poly, transform=ax.transData))
+ax.add_patch(PathPatch(grip_poly, fill=False, edgecolor='#5b1d5e', lw=1.3, zorder=3.2))
 draw(ax, [[('circle', cgm.GRIP_PIN, cgm.GRIP_PIN_R)]], C['Grip pin'], 3.2)
 draw(ax, [cgm.trigger_outline()], C['Trigger'], 2.7)
 ring, tab = cgm.eyelet_loops()
@@ -196,24 +219,25 @@ axf.set_ylim(-15, 45)
 axf.grid(True, color='#eee', zorder=-1)
 axf.set_title('Muzzle from the front')
 
-# ---- Grip seen from the front: light pink stands proud, flush at the base ----
-P = {n: v for n, v, _ in cgm.LIVE_PARAMS}
-half_full = P['grip_width'] / 2 + P['spine_proud']
-base_y = min(p[1] for p in cgm.GRIP_BASE)
-grip_rect = rect(-half_full, base_y, half_full, -cgm.FRAME_H)
-draw(axg, [grip_rect], C['Frame & Grip'], 1)
-dark = PathPatch(compound([grip_rect]), facecolor=tuple(c / 255 for c in C['Grip panel']),
-                 edgecolor='none', zorder=2)
+# ---- Bottom of the grip (gun flipped over): a flat oval ----
+cx, L, W = cgm.BASE_CENTER_X, cgm.BASE_LENGTH, cgm.BASE_WIDTH
+oval = [(cx + L / 2 * math.cos(t * math.pi / 40), W / 2 * math.sin(t * math.pi / 40)) for t in range(81)]
+oval_path = Path(oval)
+axg.add_patch(PathPatch(oval_path, facecolor=tuple(c / 255 for c in C['Frame & Grip']), edgecolor='none', zorder=1))
+seam_x = cgm.spine_front_x(cgm.GRIP_BASE_Y)
+dark = PathPatch(oval_path, facecolor=tuple(c / 255 for c in C['Grip panel']), edgecolor='none', zorder=2)
 axg.add_patch(dark)
-dark.set_clip_path(PathPatch(compound([cgm.panel_taper_loop(P['grip_width'], P['spine_proud'])]),
+dark.set_clip_path(PathPatch(Path([(seam_x, -50), (200, -50), (200, 50), (seam_x, 50), (seam_x, -50)]),
                              transform=axg.transData))
-axg.axhline(cgm.SPINE_FLUSH_Y, color='#5b1d5e', lw=0.6, ls='--')
-axg.text(0, cgm.SPINE_FLUSH_Y - 3, 'flush', ha='center', va='top', fontsize=8, color='#3b0f3d')
+axg.plot([seam_x, seam_x], [-W / 2, W / 2], color='#5b1d5e', lw=0.8, zorder=2.5)
+axg.add_patch(PathPatch(oval_path, fill=False, edgecolor='#5b1d5e', lw=1.3, zorder=3))
+axg.text(cx + L / 2 - 4, 0, 'front', rotation=90, ha='center', va='center', fontsize=8, color='#3b0f3d', zorder=4)
 axg.set_aspect('equal')
-axg.set_xlim(-25, 25)
-axg.set_ylim(base_y - 5, -5)
+axg.set_xlim(cx - L / 2 - 6, cx + L / 2 + 6)
+axg.set_ylim(-W / 2 - 6, W / 2 + 6)
+axg.invert_xaxis()
 axg.grid(True, color='#eee', zorder=-1)
-axg.set_title('Grip from the front')
+axg.set_title('Bottom (flipped over)')
 
 # ---- The concept sketch ----
 try:

@@ -97,14 +97,13 @@ SPINE_FRONT_TOP_X = 14.0    # colour seam (light/dark) at the frame bottom
 SPINE_FRONT_RAKE = 24.0
 # Front edge of the panel: a smooth curve through these points, top to bottom
 PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0, -63.0)]
-# Round base: the curve carries on from the front edge through these points,
-# front to back, and finishes on the back edge at GRIP_BASE_END_Y.
-GRIP_BASE = [(29.5, -68.5), (21.0, -72.5), (6.0, -73.0), (-9.0, -70.5), (-20.0, -65.0), (-25.0, -57.5)]
-GRIP_BASE_END_Y = -50.0
-# The light-pink back piece runs all the way down. It stands proud of the
-# dark panel (spine_proud per side) and blends down to flush at the base.
-SPINE_FADE_START_Y = -40.0      # the panel starts blending out here...
-SPINE_FLUSH_Y = -62.0           # ...and is flush with the light pink here
+# Flat oval base: below GRIP_CUT_Y the grip blends smoothly into a flat,
+# level bottom that is an ellipse when you flip the gun over.
+GRIP_CUT_Y = -50.0              # where the blend into the base starts
+GRIP_BASE_Y = -72.0             # the flat bottom
+BASE_CENTER_X = -2.0            # centre of the oval (front/back)
+BASE_LENGTH = 62.0              # oval length, front to back
+BASE_WIDTH = 34.0               # oval width, side to side
 GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
 GRIP_PIN_R = 2.2
 
@@ -149,7 +148,6 @@ LIVE_PARAMS = [
     ('slide_width', 28.0, 'Slide thickness, side to side'),
     ('frame_width', 22.0, 'Frame thickness, side to side'),
     ('grip_width', 30.0, 'Grip panel (dark pink) thickness, side to side'),
-    ('spine_proud', 2.0, 'How far the light pink stands out each side'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
     ('button_width', 9.0, 'Top button width'),
@@ -390,14 +388,15 @@ def grip_outline():
     """Whole grip (back piece + panel) as one outline."""
     top = -4.0
     rear_top = (spine_rear_x(top), top)
-    base_end = (spine_rear_x(GRIP_BASE_END_Y), GRIP_BASE_END_Y)
+    low = PANEL_FRONT[-1][1]                 # below GRIP_CUT_Y; trimmed off later
+    rear_low = (spine_rear_x(low), low)
     return [
         ('line', rear_top, (FRAME_REAR_X, top)),
         ('line', (FRAME_REAR_X, top), (FRAME_REAR_X, PANEL_FRONT[0][1])),
         ('line', (FRAME_REAR_X, PANEL_FRONT[0][1]), PANEL_FRONT[0]),
-        # front edge and round base as one smooth curve
-        ('spline',) + tuple(PANEL_FRONT) + tuple(GRIP_BASE) + (base_end,),
-        ('line', base_end, rear_top),
+        ('spline',) + tuple(PANEL_FRONT),
+        ('line', PANEL_FRONT[-1], rear_low),
+        ('line', rear_low, rear_top),
     ]
 
 
@@ -405,17 +404,6 @@ def grip_seam():
     """Line splitting the grip into the light back piece and the dark panel,
     running right through the base."""
     return [('line', (spine_front_x(0.0), 0.0), (spine_front_x(-90.0), -90.0))]
-
-
-def panel_taper_loop(grip_w, proud):
-    """Front-view (u = across, v = height) shape the panel is trimmed to:
-    grip_w wide up high, widening to grip_w + 2*proud (flush with the light
-    pink) at SPINE_FLUSH_Y and staying full width below that."""
-    w, full = grip_w / 2.0, grip_w / 2.0 + proud + 1.0
-    y0 = SPINE_FADE_START_Y
-    y1 = y0 + 1.5 * (SPINE_FLUSH_Y - y0)   # reaches full+1 here, flush 2/3 of the way
-    return polygon([(-w, 20.0), (w, 20.0), (w, y0), (full, y1), (full, -130.0),
-                    (-full, -130.0), (-full, y1), (-w, y0)])
 
 
 def guard_loops():
@@ -853,16 +841,14 @@ def build_frame(root):
     frame = extrude_sym(comp, pick_profile(sk), 'frame_width', NEW, name='Frame').bodies.item(0)
     fillet(comp, frame, FILLET_FRAME, 'Frame')
 
-    # Grip: one body with a round base, split into two colours. The dark
-    # panel is then trimmed so the light pink stands proud of it, blending
-    # back to flush at the base.
+    # Grip: one body ending in a flat oval base, then split into the light
+    # back strip and the dark panel (flush, both running into the base).
     sk = side_sketch(comp, 'Grip profile', [grip_outline()])
-    grip = extrude_sym(comp, pick_profile(sk), 'grip_width + spine_proud * 2', NEW,
-                       name='Grip').bodies.item(0)
+    grip = extrude_sym(comp, pick_profile(sk), 'grip_width', NEW, name='Grip').bodies.item(0)
     fillet(comp, grip, FILLET_GRIP, 'Grip',
            edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.y * 10 < -FRAME_H - 1)
+    add_oval_base(comp)
     split_grip(comp)
-    taper_panel(comp)
     sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
     extrude_sym(comp, pick_profile(sk), 'grip_width + 2 mm', NEW, name='Grip pin')
 
@@ -916,45 +902,46 @@ def split_grip(comp):
     halves[-1].name = 'Grip panel'
 
 
-def taper_panel(comp):
-    """Trim the panel's sides so it sits lower than the light pink, blending
-    to flush at the base, then soften the new edges."""
-    params = {n: v for n, v, _ in LIVE_PARAMS}
-    sk = front_sketch(comp, 'Panel taper', [panel_taper_loop(params['grip_width'], params['spine_proud'])],
-                      10.0)
-    panel = body_named(comp, 'Grip panel')
-    try:
-        extrude_sym(comp, pick_profile(sk), 200.0, adsk.fusion.FeatureOperations.IntersectFeatureOperation,
-                    participants=[panel])
-    except Exception:
-        _skipped.append('Grip: could not lower the dark panel, so it is flush with the light pink')
-        return
-    panel = body_named(comp, 'Grip panel')
-    fillet(comp, panel, 1.5, 'Grip panel edges',
-           edge_filter=lambda e: is_sharp(e) and not on_seam(e)
-           and e.boundingBox.maxPoint.y * 10 < -FRAME_H - 1)
+def add_oval_base(comp):
+    """Trim the grip flat at GRIP_CUT_Y and loft from there to a flat oval
+    at GRIP_BASE_Y."""
+    grip = body_named(comp, 'Grip')
+    pl = offset_plane(comp, comp.xZConstructionPlane, GRIP_CUT_Y, 'y', GRIP_CUT_Y)
+    splits = comp.features.splitBodyFeatures
+    splits.add(splits.createInput(grip, pl, True))
+    for b in bodies(comp):
+        if b.name != 'Frame' and b.boundingBox.maxPoint.y * 10 < GRIP_CUT_Y + 0.01:
+            comp.features.removeFeatures.add(b)
+    grip = [b for b in bodies(comp) if b.name != 'Frame'][0]
+    grip.name = 'Grip'
+    section = None
+    for i in range(grip.faces.count):
+        f = grip.faces.item(i)
+        plane = adsk.core.Plane.cast(f.geometry)
+        if plane and abs(abs(plane.normal.y) - 1.0) < 1e-6 and abs(f.pointOnFace.y * 10 - GRIP_CUT_Y) < 0.01:
+            section = f
+            break
+    if section is None:
+        raise RuntimeError('Could not find the grip cut face for the oval base')
 
-
-def is_sharp(edge, min_deg=10.0):
-    """True if the two faces meet at a real corner (not a smooth join)."""
-    try:
-        if edge.faces.count != 2:
-            return False
-        p = edge.pointOnEdge
-        ok1, n1 = edge.faces.item(0).evaluator.getNormalAtPoint(p)
-        ok2, n2 = edge.faces.item(1).evaluator.getNormalAtPoint(p)
-        return ok1 and ok2 and n1.angleTo(n2) > math.radians(min_deg)
-    except Exception:
-        return False
-
-
-def on_seam(edge):
-    """True if both ends of the edge lie on the light/dark seam."""
-    for v in (edge.startVertex, edge.endVertex):
-        g = v.geometry
-        if abs(X_SIGN * g.x * 10 - spine_front_x(g.y * 10)) > 0.05:
-            return False
-    return True
+    bpl = offset_plane(comp, comp.xZConstructionPlane, GRIP_BASE_Y, 'y', GRIP_BASE_Y)
+    sk = comp.sketches.add(bpl)
+    sk.name = 'Oval base'
+    cx, y = BASE_CENTER_X, GRIP_BASE_Y
+    sk.sketchCurves.sketchEllipses.add(sk_point(sk, cx, y, 0.0),
+                                       sk_point(sk, cx + BASE_LENGTH / 2.0, y, 0.0),
+                                       sk_point(sk, cx, y, BASE_WIDTH / 2.0))
+    lofts = comp.features.loftFeatures
+    inp = lofts.createInput(NEW)
+    inp.loftSections.add(section)
+    inp.loftSections.add(pick_profile(sk))
+    inp.isSolid = True
+    base = lofts.add(inp).bodies.item(0)
+    base.name = 'Base'
+    combine_join(comp, body_named(comp, 'Grip'), [base])
+    grip = body_named(comp, 'Grip')
+    fillet(comp, grip, 3.0, 'Oval base edge',
+           edge_filter=lambda e: e.boundingBox.maxPoint.y * 10 < GRIP_BASE_Y + 0.1)
 
 
 def build_trigger(root):
