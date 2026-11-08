@@ -9,10 +9,11 @@ HOW TO RUN
   The script always opens a NEW design, so it never touches your other work.
 
 WHAT YOU GET (one component per part of the sketch)
-  Slide (cat-ear rear sight, grooves), Muzzle & Shroud (barrel, heart flange,
-  front sight ring, muzzle rings), Frame & Grip (frame, readout window,
-  trigger guard, two-tone grip, charm eyelet), Trigger, Top Button,
-  Rear Cap (puffy 3D heart + grip loop) and Charm (heart padlock).
+  Slide (grooves), Muzzle & Shroud (barrel, heart flange, front sight ring,
+  muzzle rings), Frame & Grip (one light-pink piece: top strip, cat ears,
+  frame, readout window, trigger guard, grip back strip, grip loop, charm
+  eyelet; plus the dark grip panel and oval base), Trigger, Top Button,
+  Rear Cap (puffy 3D heart) and Charm (heart padlock).
 
 EDITING
   * Thicknesses (side-to-side widths, cut depths) are live Fusion parameters:
@@ -54,6 +55,11 @@ EARS_X0 = 26.0              # rear edge of the ears
 EARS_LEN = 12.0
 EARS_H = 10.0
 EARS_GAP = 6.0              # gap between the two ears
+
+# Light-pink strip wrapping the top and slanted back of the slide. It is one
+# piece with the ears, frame, grip back strip and grip loop (no seams).
+TOP_STRIP_H = 3.0           # thickness of the strip along the top
+REAR_STRIP_W = 5.0          # width of the strip down the slanted back
 
 # Top button (pill on top of the slide)
 BUTTON_X0, BUTTON_X1 = 40.0, 54.0
@@ -284,12 +290,34 @@ def arc_band(p0, pm, p1, t_start, t_end):
     return [('arc', o[0], o[1], o[2]), ('line', o[2], i[2]), ('arc', i[2], i[1], i[0]), ('line', i[0], o[0])]
 
 
-def slide_outline():
+def slide_points():
+    """Slide corners: rear-bottom, front-bottom, bevel start, bevel end, rear-top."""
     L, H = SLIDE_LEN, SLIDE_H
     fx = L + SLIDE_FRONT_LEAN
     b = SLIDE_FRONT_BEVEL
-    return polygon([(0, 0), (L, 0), (fx - b * SLIDE_FRONT_LEAN / H, H - b),
-                    (fx - b * 1.6, H), (SLIDE_REAR_LEAN, H)])
+    return [(0, 0), (L, 0), (fx - b * SLIDE_FRONT_LEAN / H, H - b),
+            (fx - b * 1.6, H), (SLIDE_REAR_LEAN, H)]
+
+
+def slide_outline():
+    return polygon(slide_points())
+
+
+def top_strip_outline():
+    """The part of the slide outline that is light pink: a band along the
+    top (TOP_STRIP_H) and down the slanted back (REAR_STRIP_W)."""
+    _, f0, f1, f2, rear_top = slide_points()
+    yi = SLIDE_H - TOP_STRIP_H
+
+    def x_at(p, q, y):
+        return p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])
+    if yi >= f1[1]:
+        front = [(x_at(f1, f2, yi), yi), f2]
+    else:
+        front = [(x_at(f0, f1, yi), yi), f1, f2]
+    # starts 1 mm below the slide so it fuses with the frame and grip back
+    return polygon([(slide_rear_x(-1.0), -1.0), (REAR_STRIP_W, -1.0), (slide_rear_x(yi) + REAR_STRIP_W, yi)]
+                   + front + [rear_top])
 
 
 def slide_rear_x(y):
@@ -385,8 +413,9 @@ def _unit(v):
 
 
 def grip_outline():
-    """Whole grip (back piece + panel) as one outline."""
-    top = -4.0
+    """Whole grip (back piece + panel) as one outline. The back runs up to
+    y = 0 to meet the light-pink strip on the slide."""
+    top = 0.0
     rear_top = (spine_rear_x(top), top)
     low = PANEL_FRONT[-1][1]                 # below GRIP_CUT_Y; trimmed off later
     rear_low = (spine_rear_x(low), low)
@@ -787,18 +816,9 @@ def build_slide(root):
     sk = side_sketch(comp, 'Slide profile', [slide_outline()])
     slide = extrude_sym(comp, pick_profile(sk), 'slide_width', NEW, name='Slide').bodies.item(0)
     fillet(comp, slide, FILLET_SLIDE, 'Slide')
-
-    # Cat ears: a wedge with a notch cut down the middle
-    sk = side_sketch(comp, 'Ears profile', [ears_outline()])
-    ears = extrude_sym(comp, pick_profile(sk), 'slide_width - 4 mm', NEW, name='Ears').bodies.item(0)
-    sk = front_sketch(comp, 'Ears notch', [polygon([
-        (-EARS_GAP / 2, SLIDE_H + 0.5), (EARS_GAP / 2, SLIDE_H + 0.5),
-        (EARS_GAP / 2, SLIDE_H + EARS_H + 5), (-EARS_GAP / 2, SLIDE_H + EARS_H + 5)])],
-        EARS_X0 + EARS_LEN / 2)
-    extrude_sym(comp, pick_profile(sk), EARS_LEN * 3, CUT, participants=[ears])
-    fillet(comp, body_named(comp, 'Ears'), 0.6, 'Ears', edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H + 0.2)
-    slide = body_named(comp, 'Slide')
-    combine_join(comp, slide, [b for b in bodies(comp) if b.name != 'Slide'])
+    # The top/back band is light pink and belongs to the Frame & Grip piece
+    sk = side_sketch(comp, 'Top strip cut', [top_strip_outline()])
+    extrude_sym(comp, pick_profile(sk), 'slide_width + 2 mm', CUT, participants=[slide])
     slide = body_named(comp, 'Slide')
 
     # Slanted grooves on both sides
@@ -851,6 +871,27 @@ def build_frame(root):
     split_grip(comp)
     sk = side_sketch(comp, 'Grip pin', [[('circle', GRIP_PIN, GRIP_PIN_R)]])
     extrude_sym(comp, pick_profile(sk), 'grip_width + 2 mm', NEW, name='Grip pin')
+
+    # Light-pink strip on the top and back of the slide, with the cat ears
+    sk = side_sketch(comp, 'Top strip', [top_strip_outline()])
+    extrude_sym(comp, pick_profile(sk), 'slide_width', NEW, name='Top strip')
+    fillet(comp, body_named(comp, 'Top strip'), FILLET_SLIDE, 'Top strip',
+           edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H - TOP_STRIP_H + 0.5)
+    sk = side_sketch(comp, 'Ears profile', [ears_outline()])
+    ears = extrude_sym(comp, pick_profile(sk), 'slide_width - 4 mm', NEW, name='Ears').bodies.item(0)
+    sk = front_sketch(comp, 'Ears notch', [polygon([
+        (-EARS_GAP / 2, SLIDE_H + 0.5), (EARS_GAP / 2, SLIDE_H + 0.5),
+        (EARS_GAP / 2, SLIDE_H + EARS_H + 5), (-EARS_GAP / 2, SLIDE_H + EARS_H + 5)])],
+        EARS_X0 + EARS_LEN / 2)
+    extrude_sym(comp, pick_profile(sk), EARS_LEN * 3, CUT, participants=[ears])
+    fillet(comp, body_named(comp, 'Ears'), 0.6, 'Ears',
+           edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H + 0.2)
+
+    # Grip loop (the hook from the heart into the grip back), same light pink
+    if INCLUDE_GRIP_LOOP:
+        sk = side_sketch(comp, 'Grip loop profile', [grip_loop_outline()])
+        extrude_sym(comp, pick_profile(sk), 'loop_width', NEW, name='Grip loop')
+        fillet(comp, body_named(comp, 'Grip loop'), 2.5, 'Grip loop')
 
     sk = side_sketch(comp, 'Trigger guard profile', guard_loops())
     guard = extrude_sym(comp, pick_profile(sk, loops=2), 'guard_width', NEW, name='Guard').bodies.item(0)
@@ -967,12 +1008,6 @@ def build_rear_cap(root):
     build_3d_heart(comp, 'Heart cap', heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG), zs)
     build_3d_heart(comp, 'Heart inset',
                    heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True), zs_in)
-    if INCLUDE_GRIP_LOOP:
-        sk = side_sketch(comp, 'Grip loop profile', [grip_loop_outline()])
-        loop = extrude_sym(comp, pick_profile(sk), 'loop_width', NEW, name='Grip loop').bodies.item(0)
-        fillet(comp, loop, 2.5, 'Grip loop')
-        cap = body_named(comp, 'Heart cap')
-        combine_join(comp, cap, [body_named(comp, 'Grip loop')])
     return comp
 
 

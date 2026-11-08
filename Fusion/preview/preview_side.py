@@ -112,7 +112,7 @@ axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
 # ---- Left side view (back to front, roughly how parts overlap) ----
 y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
 if cgm.INCLUDE_GRIP_LOOP:
-    draw(ax, [cgm.grip_loop_outline()], C['Heart cap'], 1)
+    draw(ax, [cgm.grip_loop_outline()], C['Frame & Grip'], 1)
 draw(ax, cgm.guard_loops(), C['Frame & Grip'], 2.5)
 def grip_side_silhouette():
     """Grip outline above GRIP_CUT_Y plus the blend down to the oval base."""
@@ -178,11 +178,12 @@ bulge = [[zs_in * cgm.heart_half_thickness(small, (x, yy)) - zs * cgm.heart_half
           for x in gx] for yy in gy]
 ax.contourf(gx, gy, bulge, levels=[0, 100], colors=[tuple(c / 255 for c in C['Heart inset'])], zorder=5.1)
 ax.contour(gx, gy, bulge, levels=[0], colors=['#5b1d5e'], linewidths=0.8, zorder=5.15)
-draw(ax, [cgm.ears_outline()], C['Slide'], 5.5)
+draw(ax, [cgm.ears_outline()], C['Frame & Grip'], 5.5)
 draw(ax, [cgm.button_outline()], C['Top button'], 5.5)
 draw(ax, [cgm.slide_outline()], C['Slide'], 6)
 for s in cgm.serration_outlines():
     draw(ax, [s], (170, 40, 120), 6.5)
+draw(ax, [cgm.top_strip_outline()], C['Frame & Grip'], 6.6)
 draw(ax, cgm.charm_loops(), C['Charm'], 7)
 draw(ax, cgm.charm_bail_loops(), C['Charm'], 7)
 bail = cgm.charm_bail_loops()[0][0]
