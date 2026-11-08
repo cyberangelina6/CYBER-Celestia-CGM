@@ -43,11 +43,10 @@ import adsk.fusion
 # Slide: a parallelogram whose front and rear ends lean forward at the top
 SLIDE_LEN = 134.0           # along the bottom edge
 SLIDE_H = 32.0
-# Seen from the front the slide's sides go straight down from the top, then
-# lean out below WING_TOP_Y, so the lower part shows as angled "wings".
-SLIDE_TOP_W = 24.0          # width of the straight upper part
-WING_TOP_Y = 16.0           # where the sides start leaning out
-SLIDE_SIDE_ANGLE = 30.0     # lean of the wings from vertical (bigger = more angled)
+# Seen from the front the slide's dark magenta sides ("shields") lean out
+# toward the bottom as single flat faces.
+SLIDE_TOP_W = 24.0          # width across the top of the slide
+SLIDE_SIDE_ANGLE = 8.0      # lean of the sides from vertical (bigger = more angled)
 SLIDE_FRONT_LEAN = 10.0     # top of the front face sits this far forward
 SLIDE_FRONT_BEVEL = 6.0     # bevel on the top-front corner
 SLIDE_REAR_LEAN = 24.0      # top of the rear face sits this far forward
@@ -99,14 +98,12 @@ SIGHT_BEAD_R = 3.0
 FRAME_REAR_X = 4.0
 FRAME_FRONT_X = 128.0
 FRAME_H = 12.0
-# Frame seen from the front: carries on the slide's slope out to its widest
-# point, then narrows underneath into a V.
-FRAME_FLARE_Y = -6.0        # height of the widest point
-FRAME_BOTTOM_W = 22.0       # width along the bottom
+# The light-pink frame is a plain rectangle seen from the front (straight
+# sides, flat bottom), as wide as the bottom of the slide.
 
 # Readout window (recess on the left side for a small display)
 READOUT_X0, READOUT_X1 = 84.0, 122.0
-READOUT_Y0, READOUT_Y1 = -5.0, -1.0   # on the frame's upper (outward-leaning) band
+READOUT_Y0, READOUT_Y1 = -10.0, -2.0
 
 # Grip: one shape, split into a light-pink back piece and a darker front
 # panel that sit flush and share one flat, rounded base.
@@ -346,7 +343,7 @@ def ears_outline():
 
 def serration_outlines():
     """Slanted grooves on the straight upper part of the slide's sides."""
-    y0, y1 = WING_TOP_Y + 1.0, SLIDE_H - TOP_STRIP_H - 1.0
+    y0, y1 = 5.0, SLIDE_H - TOP_STRIP_H - 1.0
     lean = SERRATION_LEAN * (y1 - y0) / (SLIDE_H - 10.0)
     return [polygon([(x, y0), (x + SERRATION_W, y0),
                      (x + SERRATION_W + lean, y1), (x + lean, y1)])
@@ -366,9 +363,8 @@ def button_outline():
 
 
 def slide_half_width(y):
-    """Half the slide's width at height y: straight above WING_TOP_Y,
-    leaning out below it."""
-    return SLIDE_TOP_W / 2.0 + max(WING_TOP_Y - y, 0.0) * math.tan(math.radians(SLIDE_SIDE_ANGLE))
+    """Half the slide's width at height y (sides lean out toward the bottom)."""
+    return SLIDE_TOP_W / 2.0 + (SLIDE_H - y) * math.tan(math.radians(SLIDE_SIDE_ANGLE))
 
 
 SLIDE_BOTTOM_W = 2.0 * slide_half_width(0.0)
@@ -377,27 +373,11 @@ SLIDE_BOTTOM_W = 2.0 * slide_half_width(0.0)
 def slide_section():
     """Front-view (u, v) shape the slide and top strip are trimmed to."""
     lo, hi = -1.5, SLIDE_H + 1.0
-    w = WING_TOP_Y
     return polygon([(-slide_half_width(lo), lo), (slide_half_width(lo), lo),
-                    (slide_half_width(w), w), (slide_half_width(hi), hi),
-                    (-slide_half_width(hi), hi), (-slide_half_width(w), w)])
+                    (slide_half_width(hi), hi), (-slide_half_width(hi), hi)])
 
 
-def frame_band_half_width(y):
-    """Half width of the frame's upper band (continues the slide's slope)."""
-    return slide_half_width(y)
-
-
-def frame_section():
-    """Front-view (u, v) shape the frame is trimmed to: the slide's slope
-    down to FRAME_FLARE_Y, then a V underneath to FRAME_BOTTOM_W."""
-    top = 1.0
-    wf = frame_band_half_width(FRAME_FLARE_Y)
-    wb = FRAME_BOTTOM_W / 2.0
-    bottom = -FRAME_H
-    return polygon([(-slide_half_width(top), top), (slide_half_width(top), top),
-                    (wf, FRAME_FLARE_Y), (wb, bottom), (wb, bottom - 1.0),
-                    (-wb, bottom - 1.0), (-wb, bottom), (-wf, FRAME_FLARE_Y)])
+FRAME_W = SLIDE_BOTTOM_W      # the rectangular frame matches the slide's bottom
 
 
 def barrel_half_section():
@@ -922,7 +902,7 @@ def build_slide(root):
 
     # Slanted grooves, sketched right on each leaning side face
     for side, label in ((1, 'left'), (-1, 'right')):
-        face = side_face(slide, side, WING_TOP_Y, SLIDE_H)
+        face = side_face(slide, side, 0.0, SLIDE_H)
         if face is None:
             _skipped.append('Slide: {} grooves skipped (side face not found)'.format(label))
             continue
@@ -994,19 +974,18 @@ def build_frame(root):
     comp = new_component(root, 'Frame & Grip')
 
     sk = side_sketch(comp, 'Frame profile', [frame_outline()])
-    frame = extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 20.0, NEW, name='Frame').bodies.item(0)
-    trim_to_section(comp, frame, frame_section(), 'Frame')
-    fillet(comp, body_named(comp, 'Frame'), FILLET_FRAME, 'Frame')
+    frame = extrude_sym(comp, pick_profile(sk), FRAME_W, NEW, name='Frame').bodies.item(0)
+    fillet(comp, frame, FILLET_FRAME, 'Frame')
 
-    # Readout window recess on the left side, on the frame's upper band
+    # Readout window recess on the left side of the frame
     frame = body_named(comp, 'Frame')
-    band = side_face(frame, 1, FRAME_FLARE_Y, 0.0)
+    band = side_face(frame, 1, -FRAME_H, 0.0)
     if band is None:
-        _skipped.append('Frame: readout window skipped (band face not found)')
+        _skipped.append('Frame: readout window skipped (side face not found)')
     else:
         sk = comp.sketches.add(band)
         sk.name = 'Readout window'
-        draw_loops(sk, [readout_outline()], lambda p: (p[0], p[1], frame_band_half_width(p[1])))
+        draw_loops(sk, [readout_outline()], lambda p: (p[0], p[1], FRAME_W / 2.0))
         extrude_sym(comp, pick_profile(sk), 'readout_depth * 2', CUT, participants=[frame])
 
     # Grip: one body ending in a flat oval base, then split into the light

@@ -222,7 +222,7 @@ draw(axf, [cgm.polygon([(-cgm.slide_half_width(cgm.SLIDE_H - cgm.TOP_STRIP_H), c
                         (cgm.slide_half_width(cgm.SLIDE_H - cgm.TOP_STRIP_H), cgm.SLIDE_H - cgm.TOP_STRIP_H),
                         (cgm.slide_half_width(cgm.SLIDE_H), cgm.SLIDE_H),
                         (-cgm.slide_half_width(cgm.SLIDE_H), cgm.SLIDE_H)])], C['Frame & Grip'], 0.85)
-frame_front = cgm.frame_section()
+frame_front = rect(-cgm.FRAME_W / 2, -cgm.FRAME_H, cgm.FRAME_W / 2, 0.0)
 draw(axf, [frame_front], C['Frame & Grip'], 0.9)
 draw(axf, [rect(-cgm.SLIDE_BOTTOM_W / 2 - 15, 0.0, cgm.SLIDE_BOTTOM_W / 2 + 15, 1.6)], (255, 255, 255), 0.95,
      edge='none')   # hide the strip of the frame shape that sits above y = 0
