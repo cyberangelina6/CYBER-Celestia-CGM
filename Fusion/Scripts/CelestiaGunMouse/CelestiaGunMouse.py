@@ -119,6 +119,7 @@ GUARD_OUT_BOTTOM_Y = -36.0
 GUARD_IN_REAR_X = 38.0
 GUARD_IN_FRONT_X = 66.0
 GUARD_IN_BOTTOM_Y = -32.0
+GUARD_WEB_DROP = 11.0       # how far down the grip front the guard blends in
 
 # Heart rear cap: a puffy 3D heart (doubles as a palm rest)
 CAP_CENTER = (-8.0, 18.0)   # midway between the two lobe centres
@@ -439,11 +440,18 @@ def guard_loops():
     h = FRAME_H
     fx, by = GUARD_OUT_FRONT_X, GUARD_OUT_BOTTOM_Y
     rear = PANEL_FRONT[0][0] - 8.0          # hidden inside the grip panel
+    # Under the guard, a curved web sweeps down into the front of the grip so
+    # the guard flows into the grip panel instead of meeting it at a corner.
+    web0 = (GUARD_IN_REAR_X + 6.0, by)
+    web1 = (PANEL_FRONT[2][0] + 0.5, by - GUARD_WEB_DROP)
+    web_mid = (web0[0] - 0.71 * (web0[0] - web1[0]), web1[1] + 0.71 * (web0[1] - web1[1]))
     outer = [
         ('line', (rear, -h + 2), (fx, -h + 2)),
         ('arc', (fx, -h + 2), (fx + 8, (-h + by) / 2 + 2), (fx - 6, by)),
-        ('line', (fx - 6, by), (rear, by)),
-        ('line', (rear, by), (rear, -h + 2)),
+        ('line', (fx - 6, by), web0),
+        ('arc', web0, web_mid, web1),
+        ('line', web1, (rear, web1[1])),
+        ('line', (rear, web1[1]), (rear, -h + 2)),
     ]
     ir, ifx, iby = GUARD_IN_REAR_X, GUARD_IN_FRONT_X, GUARD_IN_BOTTOM_Y
     inner = [
@@ -736,15 +744,28 @@ def x_plane(comp, x):
 
 
 def combine_join(comp, target, tools):
+    """Join tools into target. If joining them all at once fails, join them
+    one by one and report any that would not join."""
     if not tools:
         return
-    coll = adsk.core.ObjectCollection.create()
-    for t in tools:
-        coll.add(t)
-    inp = comp.features.combineFeatures.createInput(target, coll)
-    inp.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
-    inp.isKeepToolBodies = False
-    comp.features.combineFeatures.add(inp)
+
+    def join(items):
+        coll = adsk.core.ObjectCollection.create()
+        for t in items:
+            coll.add(t)
+        inp = comp.features.combineFeatures.createInput(target, coll)
+        inp.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
+        inp.isKeepToolBodies = False
+        comp.features.combineFeatures.add(inp)
+    try:
+        join(tools)
+    except Exception:
+        for t in tools:
+            name = t.name
+            try:
+                join([t])
+            except Exception:
+                _skipped.append('{}: could not join "{}"'.format(comp.name, name))
 
 
 def fillet(comp, body, radius, label, edge_filter=None):
@@ -893,9 +914,11 @@ def build_frame(root):
         extrude_sym(comp, pick_profile(sk), 'loop_width', NEW, name='Grip loop')
         fillet(comp, body_named(comp, 'Grip loop'), 2.5, 'Grip loop')
 
+    # Trigger guard: same dark pink as the grip panel and one piece with it
     sk = side_sketch(comp, 'Trigger guard profile', guard_loops())
     guard = extrude_sym(comp, pick_profile(sk, loops=2), 'guard_width', NEW, name='Guard').bodies.item(0)
     fillet(comp, guard, FILLET_GUARD, 'Trigger guard')
+    combine_join(comp, body_named(comp, 'Grip panel'), [body_named(comp, 'Guard')])
 
     ring_loops, tab = eyelet_loops()
     sk = side_sketch(comp, 'Charm eyelet', ring_loops)
@@ -1051,7 +1074,19 @@ def build_charm(root):
 # APPEARANCE (best effort: skipped quietly if the library isn't available)
 # =============================================================================
 
-def apply_colors(app, design, comps):
+# Colour for any body whose name isn't in BODY_COLORS, by component
+COMPONENT_COLORS = {
+    'Slide': BODY_COLORS['Slide'],
+    'Muzzle & Shroud': BODY_COLORS['Barrel'],
+    'Frame & Grip': BODY_COLORS['Frame & Grip'],
+    'Trigger': BODY_COLORS['Trigger'],
+    'Top Button': BODY_COLORS['Top button'],
+    'Rear Cap (Heart)': BODY_COLORS['Heart cap'],
+    'Charm': BODY_COLORS['Charm'],
+}
+
+
+def apply_colors(app, design):
     try:
         base = None
         for i in range(app.materialLibraries.count):
@@ -1068,10 +1103,11 @@ def apply_colors(app, design, comps):
         if base is None:
             return
         made = {}
-        for comp in comps:
+        occs = design.rootComponent.allOccurrences
+        for comp in [occs.item(i).component for i in range(occs.count)]:
             for b in bodies(comp):
-                rgb = BODY_COLORS.get(b.name)
-                if not rgb:
+                rgb = BODY_COLORS.get(b.name) or COMPONENT_COLORS.get(comp.name)
+                if not rgb or not b.isSolid:
                     continue
                 if rgb not in made:
                     ap = design.appearances.addByCopy(base, 'Celestia {} {} {}'.format(*rgb))
@@ -1117,7 +1153,7 @@ def run(context):
             except Exception:
                 _skipped.append('{} FAILED:\n{}'.format(label, traceback.format_exc(limit=2)))
 
-        apply_colors(app, design, comps)
+        apply_colors(app, design)
         app.activeViewport.fit()
 
         msg = 'CYBER Celestia CGM built: {} parts.'.format(len(comps))

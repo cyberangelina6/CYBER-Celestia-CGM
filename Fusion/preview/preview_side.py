@@ -113,7 +113,7 @@ axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
 y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
 if cgm.INCLUDE_GRIP_LOOP:
     draw(ax, [cgm.grip_loop_outline()], C['Frame & Grip'], 1)
-draw(ax, cgm.guard_loops(), C['Frame & Grip'], 2.5)
+draw(ax, cgm.guard_loops(), C['Grip panel'], 3.05, edge='none')
 def grip_side_silhouette():
     """Grip outline above GRIP_CUT_Y plus the blend down to the oval base."""
     v = loop_vertices(cgm.grip_outline())
