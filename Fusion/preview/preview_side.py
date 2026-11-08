@@ -34,6 +34,7 @@ spec = importlib.util.spec_from_file_location('cgm', SCRIPT)
 cgm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cgm)
 C = cgm.BODY_COLORS
+P = {n: v for n, v, _ in cgm.LIVE_PARAMS}
 
 
 def arc_points(p0, pm, p1, n=24):
@@ -105,9 +106,9 @@ def rect(x0, y0, x1, y1):
 
 fig = plt.figure(figsize=(16, 9))
 ax = fig.add_axes([0.03, 0.06, 0.62, 0.88])
-axf = fig.add_axes([0.67, 0.50, 0.14, 0.42])
-axg = fig.add_axes([0.83, 0.55, 0.16, 0.30])
-axs = fig.add_axes([0.67, 0.04, 0.32, 0.42])
+axf = fig.add_axes([0.655, 0.36, 0.17, 0.60])
+axg = fig.add_axes([0.835, 0.62, 0.16, 0.28])
+axs = fig.add_axes([0.835, 0.04, 0.16, 0.50])
 
 # ---- Left side view (back to front, roughly how parts overlap) ----
 y, r = cgm.BORE_AXIS_Y, cgm.BARREL_R
@@ -158,14 +159,17 @@ draw(ax, [cgm.frame_outline()], C['Frame & Grip'], 4)
 draw(ax, [cgm.readout_outline()], (120, 40, 110), 4.5)
 ax.text((cgm.READOUT_X0 + cgm.READOUT_X1) / 2, (cgm.READOUT_Y0 + cgm.READOUT_Y1) / 2, '0001',
         color='#f7a8d8', ha='center', va='center', fontsize=10, family='monospace', zorder=4.6)
-draw(ax, [rect(cgm.BARREL_X0, y - r, cgm.MUZZLE_X1, y + r)], C['Barrel'], 4.8)
-draw(ax, [rect(cgm.MUZZLE_X1 - 2, y - r - 0.6, cgm.MUZZLE_X1 + 1.5, y + r + 0.6)], C['Muzzle lip'], 5)
+draw(ax, [rect(cgm.BARREL_X0, y - r, cgm.FLANGE_X, y + r)], C['Barrel'], 4.8)
+draw(ax, [rect(cgm.FLANGE_X, y - cgm.MUZZLE_R, cgm.MUZZLE_X1, y + cgm.MUZZLE_R)], C['Barrel'], 4.9)
+draw(ax, [rect(cgm.MUZZLE_X1 - 2, y - cgm.MUZZLE_R - 0.5, cgm.MUZZLE_X1 + 1.5, y + cgm.MUZZLE_R + 0.5)],
+     C['Muzzle lip'], 5)
 fl = cgm.heart_shape(cgm.FLANGE_HEART_W)[1]
 f_top = cgm.FLANGE_HEART_CY + fl['r']
 f_bot = cgm.FLANGE_HEART_CY - fl['h']
 draw(ax, [rect(cgm.FLANGE_X, f_bot, cgm.FLANGE_X + cgm.FLANGE_T, f_top)], C['Heart flange'], 5.2)
-sight = cgm.front_sight_loops()[0][0]
-draw(ax, [rect(cgm.FLANGE_X + 1.5, sight[1][1] - sight[2], cgm.FLANGE_X + 4.5, sight[1][1] + sight[2])],
+_, sight_c = cgm._sight_centre()
+sight_top = sight_c[1] + cgm.SIGHT_R_OUT * math.cos(math.radians(cgm.SIGHT_GAP_DEG))
+draw(ax, [rect(cgm.FLANGE_X + 1.5, sight_c[1] - cgm.SIGHT_R_OUT, cgm.FLANGE_X + 4.5, sight_top)],
      C['Heart flange'], 5.1)
 draw(ax, [cgm.cap_outline()], C['Heart cap'], 5)
 # Cream centre: where the inner 3D heart bulges out of the cap
@@ -192,7 +196,7 @@ ax.plot([cgm.EYELET_CENTER[0], bail[1][0]], [cgm.EYELET_CENTER[1] - cgm.EYELET_R
 
 labels = {
     'slide': (100, 16), 'barrel': (150, y), 'shroud': (cgm.FLANGE_X + 3, f_bot - 4),
-    'front sight': (cgm.FLANGE_X + 3, sight[1][1] + 10), 'rear cap': (-8, 30),
+    'front sight': (cgm.FLANGE_X + 3, sight_top + 5), 'rear cap': (-8, 30),
     'grip loop': (-30, -28), 'grip': (15, -45), 'trigger': (52, -38), 'readout': (103, -18),
     'charm': (cgm.CHARM_CENTER[0], cgm.CHARM_CENTER[1] - 15), 'top button': (47, 44),
     'ears': (32, 47),
@@ -208,17 +212,33 @@ ax.grid(True, color='#eee', zorder=-1)
 ax.set_title('Left side (mm)')
 
 # ---- Front view of the muzzle / shroud ----
+# whole gun seen from the front, back to front
+gw = P['grip_width'] / 2
+draw(axf, [cgm.polygon([(-gw, -cgm.FRAME_H + 1), (gw, -cgm.FRAME_H + 1), (gw, cgm.GRIP_CUT_Y),
+                        (cgm.BASE_WIDTH / 2, cgm.GRIP_BASE_Y), (-cgm.BASE_WIDTH / 2, cgm.GRIP_BASE_Y),
+                        (-gw, cgm.GRIP_CUT_Y)])], C['Grip panel'], 0.5)
+draw(axf, [cgm.slide_section()], C['Slide'], 0.8)
+draw(axf, [cgm.polygon([(-cgm.slide_half_width(cgm.SLIDE_H - cgm.TOP_STRIP_H), cgm.SLIDE_H - cgm.TOP_STRIP_H),
+                        (cgm.slide_half_width(cgm.SLIDE_H - cgm.TOP_STRIP_H), cgm.SLIDE_H - cgm.TOP_STRIP_H),
+                        (cgm.slide_half_width(cgm.SLIDE_H), cgm.SLIDE_H),
+                        (-cgm.slide_half_width(cgm.SLIDE_H), cgm.SLIDE_H)])], C['Frame & Grip'], 0.85)
+frame_front = cgm.frame_section()
+draw(axf, [frame_front], C['Frame & Grip'], 0.9)
+draw(axf, [rect(-cgm.SLIDE_BOTTOM_W / 2 - 15, 0.0, cgm.SLIDE_BOTTOM_W / 2 + 15, 1.6)], (255, 255, 255), 0.95,
+     edge='none')   # hide the strip of the frame shape that sits above y = 0
+draw(axf, [cgm.slide_section()], C['Slide'], 0.96)
 draw(axf, cgm.flange_loops(), C['Heart flange'], 1)
 draw(axf, cgm.flange_inset_loops(), C['Heart inset'], 2)
 draw(axf, cgm.front_sight_loops(), C['Heart flange'], 1.5)
-draw(axf, [[('circle', (0, y), r + 0.6)], [('circle', (0, y), cgm.MUZZLE_LIP_R_IN)]], C['Muzzle lip'], 3)
-draw(axf, [[('circle', (0, y), cgm.MUZZLE_LIP_R_IN)], [('circle', (0, y), cgm.BORE_R)]], C['Barrel'], 3)
-draw(axf, [[('circle', (0, y), cgm.BORE_R)]], (90, 25, 90), 3)
+draw(axf, cgm.sight_bead_loops(), C['Sight bead'], 1.6)
+draw(axf, [[('circle', (0, y), cgm.MUZZLE_R + 0.5)], [('circle', (0, y), cgm.MUZZLE_LIP_R_IN)]], C['Muzzle lip'], 3)
+draw(axf, [[('circle', (0, y), cgm.MUZZLE_LIP_R_IN)], [('circle', (0, y), cgm.BORE_R)]], C['Heart flange'], 3)
+draw(axf, [[('circle', (0, y), cgm.BORE_R)]], (200, 70, 160), 3)
 axf.set_aspect('equal')
-axf.set_xlim(-30, 30)
-axf.set_ylim(-15, 45)
+axf.set_xlim(-40, 40)
+axf.set_ylim(cgm.GRIP_BASE_Y - 4, 54)
 axf.grid(True, color='#eee', zorder=-1)
-axf.set_title('Muzzle from the front')
+axf.set_title('From the front')
 
 # ---- Bottom of the grip (gun flipped over): a flat oval ----
 cx, L, W = cgm.BASE_CENTER_X, cgm.BASE_LENGTH, cgm.BASE_WIDTH

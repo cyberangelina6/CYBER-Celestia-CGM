@@ -43,6 +43,10 @@ import adsk.fusion
 # Slide: a parallelogram whose front and rear ends lean forward at the top
 SLIDE_LEN = 134.0           # along the bottom edge
 SLIDE_H = 32.0
+# Seen from the front the slide is narrow on top and wide at the bottom, so
+# its dark magenta sides show as angled "wings".
+SLIDE_BOTTOM_W = 60.0       # width where the slide sits on the frame
+SLIDE_SIDE_ANGLE = 30.0     # lean of the sides from vertical (bigger = more angled)
 SLIDE_FRONT_LEAN = 10.0     # top of the front face sits this far forward
 SLIDE_FRONT_BEVEL = 6.0     # bevel on the top-front corner
 SLIDE_REAR_LEAN = 24.0      # top of the rear face sits this far forward
@@ -72,28 +76,36 @@ BARREL_X0 = 128.0           # starts inside the slide
 FLANGE_X = 162.0            # rear face of the heart flange (the "shroud")
 FLANGE_T = 6.0              # flange thickness
 MUZZLE_X1 = 184.0           # front face of the muzzle
-MUZZLE_LIP_R_IN = 11.0      # cream lip ring on the muzzle front
-MUZZLE_RING_R = 9.5         # inner ring step
+MUZZLE_LIP_R_IN = 10.5      # light-pink lip ring on the muzzle front
+MUZZLE_RING_R = 9.0         # inner ring step
 BORE_R = 7.0
 BORE_DEPTH = 15.0
 
+MUZZLE_R = 13.0             # muzzle in front of the heart flange
+
 # Heart flange (shroud) around the barrel, tip pointing down
 FLANGE_HEART_W = 52.0
-FLANGE_HEART_CY = 16.0      # height of the line between the two lobes
+FLANGE_HEART_CY = 21.0      # height of the line between the two lobes
 
-# Front sight: ring facing forward, sitting in the flange heart's top dip
-SIGHT_R_OUT = 6.0
-SIGHT_R_IN = 3.5
-SIGHT_LIFT = 5.0            # ring centre height above the heart's dip
+# Front sight: two horns (an open ring) in the heart's top dip, with a bead
+SIGHT_R_OUT = 10.0
+SIGHT_R_IN = 6.0
+SIGHT_LIFT = 6.0            # horn ring centre above the heart's dip
+SIGHT_GAP_DEG = 25.0        # half-angle of the opening between the horn tips
+SIGHT_BEAD_R = 3.0
 
 # Frame (strip under the slide)
 FRAME_REAR_X = 4.0
 FRAME_FRONT_X = 128.0
 FRAME_H = 12.0
+# Frame seen from the front: carries on the slide's slope out to its widest
+# point, then narrows underneath into a V.
+FRAME_FLARE_Y = -6.0        # height of the widest point
+FRAME_BOTTOM_W = 22.0       # width along the bottom
 
 # Readout window (recess on the left side for a small display)
 READOUT_X0, READOUT_X1 = 84.0, 122.0
-READOUT_Y0, READOUT_Y1 = -10.0, -2.0
+READOUT_Y0, READOUT_Y1 = -5.0, -1.0   # on the frame's upper (outward-leaning) band
 
 # Grip: one shape, split into a light-pink back piece and a darker front
 # panel that sit flush and share one flat, rounded base.
@@ -128,7 +140,7 @@ CAP_TILT_DEG = 40.0         # tilts the tip forward/down into the slide
 CAP_DEPTH = 30.0            # thickness at the fullest part of the lobes
 CAP_INSET_SCALE = 0.85      # size of the cream heart inside the cap
 CAP_INSET_PROUD = 2.0       # how far the cream centre bulges out of each side
-INSET_SCALE = 0.68          # cream inner heart size on the flange
+INSET_SCALE = 0.8           # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
@@ -152,8 +164,6 @@ FILLET_SMALL = 1.0
 
 # Live parameters: (name, value in mm, comment). Shown in Change Parameters.
 LIVE_PARAMS = [
-    ('slide_width', 28.0, 'Slide thickness, side to side'),
-    ('frame_width', 22.0, 'Frame thickness, side to side'),
     ('grip_width', 30.0, 'Grip panel (dark pink) thickness, side to side'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
@@ -173,8 +183,9 @@ CREAM = (252, 240, 185)
 BODY_COLORS = {
     'Slide': (232, 72, 170),
     'Barrel': (246, 160, 210),
-    'Muzzle lip': CREAM,
-    'Heart flange': (250, 196, 236),
+    'Muzzle lip': (255, 180, 206),
+    'Sight bead': (250, 206, 245),
+    'Heart flange': (247, 140, 210),
     'Flange inset': CREAM,
     'Frame & Grip': (250, 190, 228),
     'Grip panel': (238, 112, 190),
@@ -350,12 +361,46 @@ def button_outline():
     ]
 
 
+def slide_half_width(y):
+    """Half the slide's width at height y (sides lean in toward the top)."""
+    return SLIDE_BOTTOM_W / 2.0 - y * math.tan(math.radians(SLIDE_SIDE_ANGLE))
+
+
+SLIDE_TOP_W = 2.0 * slide_half_width(SLIDE_H)
+
+
+def slide_section():
+    """Front-view (u, v) trapezoid the slide and top strip are trimmed to."""
+    lo, hi = -1.5, SLIDE_H + 1.0
+    return polygon([(-slide_half_width(lo), lo), (slide_half_width(lo), lo),
+                    (slide_half_width(hi), hi), (-slide_half_width(hi), hi)])
+
+
+def frame_band_half_width(y):
+    """Half width of the frame's upper band (continues the slide's slope)."""
+    return slide_half_width(y)
+
+
+def frame_section():
+    """Front-view (u, v) shape the frame is trimmed to: the slide's slope
+    down to FRAME_FLARE_Y, then a V underneath to FRAME_BOTTOM_W."""
+    top = 1.0
+    wf = frame_band_half_width(FRAME_FLARE_Y)
+    wb = FRAME_BOTTOM_W / 2.0
+    bottom = -FRAME_H
+    return polygon([(-slide_half_width(top), top), (slide_half_width(top), top),
+                    (wf, FRAME_FLARE_Y), (wb, bottom), (wb, bottom - 1.0),
+                    (-wb, bottom - 1.0), (-wb, bottom), (-wf, FRAME_FLARE_Y)])
+
+
 def barrel_half_section():
     """Half cross-section revolved around y = BORE_AXIS_Y."""
     y = BORE_AXIS_Y
     x1 = MUZZLE_X1
     bb = x1 - BORE_DEPTH
-    pts = [(bb, y), (BARREL_X0, y), (BARREL_X0, y + BARREL_R), (x1, y + BARREL_R),
+    xf = FLANGE_X + FLANGE_T
+    pts = [(bb, y), (BARREL_X0, y), (BARREL_X0, y + BARREL_R), (xf, y + BARREL_R),
+           (xf, y + MUZZLE_R), (x1, y + MUZZLE_R),
            (x1, y + MUZZLE_LIP_R_IN), (x1 - 1.5, y + MUZZLE_LIP_R_IN),
            (x1 - 1.5, y + MUZZLE_RING_R), (x1 - 3.0, y + MUZZLE_RING_R),
            (x1 - 3.0, y + BORE_R), (bb, y + BORE_R)]
@@ -363,10 +408,10 @@ def barrel_half_section():
 
 
 def muzzle_lip_half_section():
-    """Cream lip ring standing 1.5 mm proud of the muzzle front."""
+    """Light-pink lip ring standing 1.5 mm proud of the muzzle front."""
     y, x1 = BORE_AXIS_Y, MUZZLE_X1
     return polygon([(x1 - 2.0, y + MUZZLE_LIP_R_IN), (x1 + 1.5, y + MUZZLE_LIP_R_IN),
-                    (x1 + 1.5, y + BARREL_R + 0.6), (x1 - 2.0, y + BARREL_R + 0.6)])
+                    (x1 + 1.5, y + MUZZLE_R + 0.5), (x1 - 2.0, y + MUZZLE_R + 0.5)])
 
 
 # Front-view outlines (u = across the gun, v = height) for the flange
@@ -378,10 +423,35 @@ def flange_inset_loops():
     return [heart_inset(FLANGE_HEART_W, (0.0, FLANGE_HEART_CY), 0.0)]
 
 
-def front_sight_loops():
+def _sight_centre():
     cusp = FLANGE_HEART_CY + heart_shape(FLANGE_HEART_W)[1]['cusp_y']
-    c = (0.0, cusp + SIGHT_LIFT)
-    return [[('circle', c, SIGHT_R_OUT)], [('circle', c, SIGHT_R_IN)]]
+    return cusp, (0.0, cusp + SIGHT_LIFT)
+
+
+def front_sight_loops():
+    """Two horns: a ring open at the top, with rounded tips."""
+    _, c = _sight_centre()
+    ro, ri = SIGHT_R_OUT, SIGHT_R_IN
+    rr = (ro - ri) / 2.0
+
+    def at(r, deg):
+        a = math.radians(deg)
+        return (c[0] + r * math.cos(a), c[1] + r * math.sin(a))
+    a_r, a_l = 90.0 - SIGHT_GAP_DEG, 90.0 + SIGHT_GAP_DEG     # right / left tip angles
+    m_r, m_l = at((ro + ri) / 2.0, a_r), at((ro + ri) / 2.0, a_l)
+    cap_r = (m_r[0] - rr * math.sin(math.radians(a_r)), m_r[1] + rr * math.cos(math.radians(a_r)))
+    cap_l = (m_l[0] + rr * math.sin(math.radians(a_l)), m_l[1] - rr * math.cos(math.radians(a_l)))
+    return [[
+        ('arc', at(ro, a_l), at(ro, 270.0), at(ro, a_r)),
+        ('arc', at(ro, a_r), cap_r, at(ri, a_r)),
+        ('arc', at(ri, a_r), at(ri, 270.0), at(ri, a_l)),
+        ('arc', at(ri, a_l), cap_l, at(ro, a_l)),
+    ]]
+
+
+def sight_bead_loops():
+    cusp, _ = _sight_centre()
+    return [[('circle', (0.0, cusp + 1.5), SIGHT_BEAD_R)]]
 
 
 def frame_outline():
@@ -835,23 +905,59 @@ CUT = adsk.fusion.FeatureOperations.CutFeatureOperation
 def build_slide(root):
     comp = new_component(root, 'Slide')
     sk = side_sketch(comp, 'Slide profile', [slide_outline()])
-    slide = extrude_sym(comp, pick_profile(sk), 'slide_width', NEW, name='Slide').bodies.item(0)
-    fillet(comp, slide, FILLET_SLIDE, 'Slide')
+    slide = extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 10.0, NEW, name='Slide').bodies.item(0)
+    trim_to_section(comp, slide, slide_section(), 'Slide')
+    fillet(comp, body_named(comp, 'Slide'), FILLET_SLIDE, 'Slide')
     # The top/back band is light pink and belongs to the Frame & Grip piece
     sk = side_sketch(comp, 'Top strip cut', [top_strip_outline()])
-    extrude_sym(comp, pick_profile(sk), 'slide_width + 2 mm', CUT, participants=[slide])
+    extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 20.0, CUT, participants=[body_named(comp, 'Slide')])
     slide = body_named(comp, 'Slide')
 
-    # Slanted grooves on both sides
-    for side, label in ((1, 'right'), (-1, 'left')):
-        expr = 'slide_width / 2' if side > 0 else '-slide_width / 2'
-        pl = offset_plane(comp, comp.xYConstructionPlane, expr, 'z', side * 14.0)
-        sk = side_sketch(comp, 'Grooves ({})'.format(label), serration_outlines(), plane=pl)
+    # Slanted grooves, sketched right on each leaning side face
+    for side, label in ((1, 'left'), (-1, 'right')):
+        face = side_face(slide, side, 0.0, SLIDE_H)
+        if face is None:
+            _skipped.append('Slide: {} grooves skipped (side face not found)'.format(label))
+            continue
+        sk = comp.sketches.add(face)
+        sk.name = 'Grooves ({})'.format(label)
+        draw_loops(sk, serration_outlines(), lambda p, s=side: (p[0], p[1], s * slide_half_width(p[1])))
         try:
             extrude_sym(comp, all_profiles(sk), 'serration_depth * 2', CUT, participants=[slide])
         except Exception:
             _skipped.append('Slide: {} grooves skipped'.format(label))
     return comp
+
+
+def trim_to_section(comp, body, section_loop, label):
+    """Intersect a body with a long prism of the given front-view shape, so
+    its cross-section (seen from the front) becomes that shape."""
+    sk = front_sketch(comp, '{} cross-section'.format(label), [section_loop], 60.0)
+    try:
+        extrude_sym(comp, pick_profile(sk), 400.0, adsk.fusion.FeatureOperations.IntersectFeatureOperation,
+                    participants=[body])
+    except Exception:
+        _skipped.append('{}: could not shape its cross-section, left straight-sided'.format(label))
+
+
+def side_face(body, side, y_lo, y_hi):
+    """The biggest flat face on the given side (+1 = +Z = left, -1 = right)
+    that leans sideways, with its centre between y_lo and y_hi (outline mm)."""
+    best, best_area = None, 0.0
+    for i in range(body.faces.count):
+        f = body.faces.item(i)
+        plane = adsk.core.Plane.cast(f.geometry)
+        if not plane:
+            continue
+        n = plane.normal
+        p = f.pointOnFace
+        if abs(n.z) < 0.3 or abs(n.x) > 0.3 or p.z * side <= 0:
+            continue
+        if not (y_lo <= p.y * 10 <= y_hi):
+            continue
+        if f.area > best_area:
+            best, best_area = f, f.area
+    return best
 
 
 def build_muzzle(root):
@@ -865,9 +971,11 @@ def build_muzzle(root):
     sk = front_sketch(comp, 'Heart flange', flange_loops(), mid)
     flange = extrude_sym(comp, pick_profile(sk), 'flange_width', NEW, name='Heart flange').bodies.item(0)
     fillet(comp, flange, 1.5, 'Heart flange', edge_filter=flat_in('x'))
-    sk = front_sketch(comp, 'Front sight ring', front_sight_loops(), mid)
+    sk = front_sketch(comp, 'Front sight horns', front_sight_loops(), mid)
     flange = body_named(comp, 'Heart flange')
-    extrude_sym(comp, pick_profile(sk, loops=2), 'sight_thickness', JOIN, participants=[flange])
+    extrude_sym(comp, pick_profile(sk), 'sight_thickness', JOIN, participants=[flange])
+    sk = front_sketch(comp, 'Front sight bead', sight_bead_loops(), mid)
+    extrude_sym(comp, pick_profile(sk), 'sight_thickness + 1 mm', NEW, name='Sight bead')
     front = FLANGE_X + FLANGE_T
     sk = front_sketch(comp, 'Flange inset', flange_inset_loops(), front)
     extrude_sym(comp, pick_profile(sk), 'inset_proud * 2', NEW, name='Flange inset')
@@ -879,8 +987,20 @@ def build_frame(root):
     comp = new_component(root, 'Frame & Grip')
 
     sk = side_sketch(comp, 'Frame profile', [frame_outline()])
-    frame = extrude_sym(comp, pick_profile(sk), 'frame_width', NEW, name='Frame').bodies.item(0)
-    fillet(comp, frame, FILLET_FRAME, 'Frame')
+    frame = extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 20.0, NEW, name='Frame').bodies.item(0)
+    trim_to_section(comp, frame, frame_section(), 'Frame')
+    fillet(comp, body_named(comp, 'Frame'), FILLET_FRAME, 'Frame')
+
+    # Readout window recess on the left side, on the frame's upper band
+    frame = body_named(comp, 'Frame')
+    band = side_face(frame, 1, FRAME_FLARE_Y, 0.0)
+    if band is None:
+        _skipped.append('Frame: readout window skipped (band face not found)')
+    else:
+        sk = comp.sketches.add(band)
+        sk.name = 'Readout window'
+        draw_loops(sk, [readout_outline()], lambda p: (p[0], p[1], frame_band_half_width(p[1])))
+        extrude_sym(comp, pick_profile(sk), 'readout_depth * 2', CUT, participants=[frame])
 
     # Grip: one body ending in a flat oval base, then split into the light
     # back strip and the dark panel (flush, both running into the base).
@@ -895,11 +1015,12 @@ def build_frame(root):
 
     # Light-pink strip on the top and back of the slide, with the cat ears
     sk = side_sketch(comp, 'Top strip', [top_strip_outline()])
-    extrude_sym(comp, pick_profile(sk), 'slide_width', NEW, name='Top strip')
+    strip = extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 10.0, NEW, name='Top strip').bodies.item(0)
+    trim_to_section(comp, strip, slide_section(), 'Top strip')
     fillet(comp, body_named(comp, 'Top strip'), FILLET_SLIDE, 'Top strip',
            edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H - TOP_STRIP_H + 0.5)
     sk = side_sketch(comp, 'Ears profile', [ears_outline()])
-    ears = extrude_sym(comp, pick_profile(sk), 'slide_width - 4 mm', NEW, name='Ears').bodies.item(0)
+    ears = extrude_sym(comp, pick_profile(sk), SLIDE_TOP_W - 4.0, NEW, name='Ears').bodies.item(0)
     sk = front_sketch(comp, 'Ears notch', [polygon([
         (-EARS_GAP / 2, SLIDE_H + 0.5), (EARS_GAP / 2, SLIDE_H + 0.5),
         (EARS_GAP / 2, SLIDE_H + EARS_H + 5), (-EARS_GAP / 2, SLIDE_H + EARS_H + 5)])],
@@ -931,11 +1052,6 @@ def build_frame(root):
                                if b.name not in ('Frame', 'Grip panel', 'Grip pin')])
     frame = body_named(comp, 'Frame')
     frame.name = 'Frame & Grip'
-
-    # Readout window recess on the left side (+Z after mirroring)
-    pl = offset_plane(comp, comp.xYConstructionPlane, 'frame_width / 2', 'z', 11.0)
-    sk = side_sketch(comp, 'Readout window', [readout_outline()], plane=pl)
-    extrude_sym(comp, pick_profile(sk), 'readout_depth * 2', CUT, participants=[frame])
     return comp
 
 
