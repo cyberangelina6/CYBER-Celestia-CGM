@@ -172,16 +172,12 @@ sight_top = sight_c[1] + cgm.SIGHT_R_OUT * math.cos(math.radians(cgm.SIGHT_GAP_D
 draw(ax, [rect(cgm.FLANGE_X + 1.5, sight_c[1] - cgm.SIGHT_R_OUT, cgm.FLANGE_X + 4.5, sight_top)],
      C['Heart flange'], 5.1)
 draw(ax, [cgm.cap_outline()], C['Heart cap'], 5)
-# Cream centre: where the inner 3D heart bulges out of the cap
-big = cgm.heart_lobes(cgm.CAP_HEART_W, cgm.CAP_CENTER, cgm.CAP_TILT_DEG)
-small = cgm.heart_lobes(cgm.CAP_HEART_W, cgm.CAP_CENTER, cgm.CAP_TILT_DEG, cgm.CAP_INSET_SCALE, inset=True)
-zs, zs_in = cgm.cap_z_scales()
-gx = [cgm.CAP_CENTER[0] - 45 + i * 0.5 for i in range(181)]
-gy = [cgm.CAP_CENTER[1] - 45 + j * 0.5 for j in range(181)]
-bulge = [[zs_in * cgm.heart_half_thickness(small, (x, yy)) - zs * cgm.heart_half_thickness(big, (x, yy))
-          for x in gx] for yy in gy]
-ax.contourf(gx, gy, bulge, levels=[0, 100], colors=[tuple(c / 255 for c in C['Heart inset'])], zorder=5.1)
-ax.contour(gx, gy, bulge, levels=[0], colors=['#5b1d5e'], linewidths=0.8, zorder=5.15)
+# Cream centre: roughly where the inner dome bulges out of the cap
+cream = cgm.transform(cgm.cap_inset_outline(), 0.0, (0.0, 0.0), 1.0)
+pc = cgm.heart_dome_centre(cgm.CAP_HEART_W, cgm.CAP_CENTER, cgm.CAP_TILT_DEG)
+cream = [(seg[0],) + tuple((pc[0] + 0.72 * (q[0] - pc[0]), pc[1] + 0.72 * (q[1] - pc[1])) for q in seg[1:])
+         for seg in cream]
+draw(ax, [cream], C['Heart inset'], 5.1)
 draw(ax, [cgm.ears_outline()], C['Frame & Grip'], 5.5)
 draw(ax, [cgm.button_outline()], C['Top button'], 5.5)
 draw(ax, [cgm.slide_outline()], C['Slide'], 6)

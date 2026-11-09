@@ -135,10 +135,9 @@ GUARD_WEB_DROP = 11.0       # how far down the grip front the guard blends in
 CAP_CENTER = (-8.0, 18.0)   # midway between the two lobe centres
 CAP_HEART_W = 58.0          # lobe-to-lobe width before tilting
 CAP_TILT_DEG = 40.0         # tilts the tip forward/down into the slide
-CAP_DEPTH = 30.0            # thickness at the fullest part of the lobes
+CAP_DEPTH = 30.0            # thickness at the middle of the heart
 CAP_INSET_SCALE = 0.85      # size of the cream heart inside the cap
 CAP_INSET_PROUD = 2.0       # how far the cream centre bulges out of each side
-CAP_CREASE_R = 6.0          # smooths the crease where the two lobes meet
 INSET_SCALE = 0.8           # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
@@ -547,70 +546,12 @@ def cap_inset_outline():
     return heart_inset(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE)
 
 
-def heart_lobes(width, center, tilt_deg, scale=1.0, inset=False):
-    """The two lobes of a 3D heart as (tip, lobe_centre, radius). Each lobe
-    is a ball with a cone running from it to the shared tip; together they
-    have exactly the outline of heart()."""
+def heart_dome_centre(width, center, tilt_deg, scale=1.0):
+    """Where the puffy heart's dome peaks (side view): between the lobes and
+    the tip, a bit toward the lobes."""
     info = heart_shape(width)[1]
-    r, a, h = info['r'] * scale, info['a'] * scale, info['h'] * scale
-    shift = (0.0, 0.0)
-    if inset:
-        shift = _rot((0.0, -(1 - scale) * (info['h'] - info['r']) / 2.0), tilt_deg)
-    ox, oy = center[0] + shift[0], center[1] + shift[1]
-
-    def place(p):
-        q = _rot(p, tilt_deg)
-        return (q[0] + ox, q[1] + oy)
-    tip = place((0.0, -h))
-    return [(tip, place((a, 0.0)), r), (tip, place((-a, 0.0)), r)]
-
-
-def lobe_half_section(tip, c, r):
-    """Half outline of one lobe (cone + ball) to revolve around tip -> c.
-    Returns (loop, axis_end)."""
-    u = _unit((c[0] - tip[0], c[1] - tip[1]))
-    d = math.hypot(c[0] - tip[0], c[1] - tip[1])
-    theta = math.pi - math.acos(r / d)          # tangent point, measured from u
-
-    def on_ball(ang):
-        v = _rot(u, math.degrees(ang))
-        return (c[0] + r * v[0], c[1] + r * v[1])
-    p, mid, end = on_ball(theta), on_ball(theta / 2.0), on_ball(0.0)
-    return [('line', tip, p), ('arc', p, mid, end), ('line', end, tip)], end
-
-
-def heart_half_thickness(lobes, pt):
-    """Half-thickness of an unscaled 3D heart at side-view point pt."""
-    best = 0.0
-    for tip, c, r in lobes:
-        u = _unit((c[0] - tip[0], c[1] - tip[1]))
-        d = math.hypot(c[0] - tip[0], c[1] - tip[1])
-        vx, vy = pt[0] - tip[0], pt[1] - tip[1]
-        s = vx * u[0] + vy * u[1]                       # distance along the axis
-        rho = abs(vx * u[1] - vy * u[0])                # distance from the axis
-        s_tan = (d * d - r * r) / d                     # where the cone meets the ball
-        if s <= 0:
-            continue
-        if s <= s_tan:
-            R = s * r / math.sqrt(d * d - r * r)
-        elif s <= d + r:
-            R = math.sqrt(max(r * r - (s - d) ** 2, 0.0))
-        else:
-            continue
-        if rho < R:
-            best = max(best, math.sqrt(R * R - rho * rho))
-    return best
-
-
-def cap_z_scales():
-    """Z (side-to-side) squash for the cap and for its cream centre, so the
-    cap is CAP_DEPTH thick and the centre bulges CAP_INSET_PROUD out."""
-    big = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
-    small = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True)
-    zs = CAP_DEPTH / (2.0 * big[0][2])
-    peak = small[0][1]
-    zs_in = (zs * heart_half_thickness(big, peak) + CAP_INSET_PROUD) / small[0][2]
-    return zs, zs_in
+    p = _rot((0.0, -0.35 * info['h'] * scale), tilt_deg)
+    return (center[0] + p[0], center[1] + p[1])
 
 
 def grip_loop_outline():
@@ -1129,99 +1070,50 @@ def build_button(root):
 
 
 def build_rear_cap(root):
+    """Puffy 3D heart: the heart outline swells out into a smooth dome on
+    each side. The cream centre is a slightly smaller, slightly taller dome
+    that bulges out through the middle of each side."""
     comp = new_component(root, 'Rear Cap (Heart)')
-    zs, zs_in = cap_z_scales()
-    big = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
-    small = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True)
-    build_3d_heart(comp, 'Heart cap', big, zs, CAP_CREASE_R)
-    build_3d_heart(comp, 'Heart inset', small, zs_in, CAP_CREASE_R * CAP_INSET_SCALE)
-
-    # Fuse the cream centre into the heart so it is one solid, soften where
-    # the cream bulge meets the heart, then mark the bulge faces cream.
-    combine_join(comp, body_named(comp, 'Heart cap'), [body_named(comp, 'Heart inset')])
-    cap = body_named(comp, 'Heart cap')
-    smooth_creases(comp, cap, 1.2, big[0][0], 'Heart cream edge')
-    cap = body_named(comp, 'Heart cap')
-    for i in range(cap.faces.count):
-        f = cap.faces.item(i)
-        p = f.pointOnFace
-        x, y, z = X_SIGN * p.x * 10, p.y * 10, abs(p.z * 10)
-        z_big = zs * heart_half_thickness(big, (x, y))
-        z_cream = zs_in * heart_half_thickness(small, (x, y))
-        if z_cream > z_big and z_cream - 0.6 <= z <= z_cream + 2.0:   # on the cream bulge
-            f.attributes.add('celestia', 'color', 'Heart inset')
+    build_dome_heart(comp, 'Heart cap', cap_outline(),
+                     heart_dome_centre(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG), CAP_DEPTH / 2.0)
+    info = heart_shape(CAP_HEART_W)[1]
+    shift = _rot((0.0, -(1 - CAP_INSET_SCALE) * (info['h'] - info['r']) / 2.0), CAP_TILT_DEG)
+    inset_centre = (CAP_CENTER[0] + shift[0], CAP_CENTER[1] + shift[1])
+    build_dome_heart(comp, 'Heart inset', cap_inset_outline(),
+                     heart_dome_centre(CAP_HEART_W, inset_centre, CAP_TILT_DEG, CAP_INSET_SCALE),
+                     CAP_DEPTH / 2.0 + CAP_INSET_PROUD)
     return comp
 
 
-def is_sharp(edge, min_deg=10.0):
-    """True if the two faces meet at a real corner (not a smooth join)."""
+def build_dome_heart(comp, name, outline, peak, half_t):
+    """Loft from a point half_t in front, through the heart outline, to a
+    point half_t behind, rounding into each point. Falls back to a thick
+    heart with fully rounded edges if Fusion won't make the loft."""
+    sk = side_sketch(comp, '{} outline'.format(name), [outline])
+    profile = pick_profile(sk)
     try:
-        if edge.faces.count != 2:
-            return False
-        p = edge.pointOnEdge
-        ok1, n1 = edge.faces.item(0).evaluator.getNormalAtPoint(p)
-        ok2, n2 = edge.faces.item(1).evaluator.getNormalAtPoint(p)
-        return ok1 and ok2 and n1.angleTo(n2) > math.radians(min_deg)
+        ends = []
+        for sgn in (1, -1):
+            pl = offset_plane(comp, comp.xYConstructionPlane, sgn * half_t, 'z', sgn * half_t)
+            psk = comp.sketches.add(pl)
+            psk.name = '{} peak {}'.format(name, 'left' if sgn > 0 else 'right')
+            ends.append(psk.sketchPoints.add(sk_point(psk, peak[0], peak[1], sgn * half_t)))
+        lofts = comp.features.loftFeatures
+        inp = lofts.createInput(NEW)
+        first = inp.loftSections.add(ends[0])
+        first.setPointTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
+        inp.loftSections.add(profile)
+        last = inp.loftSections.add(ends[1])
+        last.setPointTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
+        inp.isSolid = True
+        body = lofts.add(inp).bodies.item(0)
+        body.name = name
+        return body
     except Exception:
-        return False
-
-
-def smooth_creases(comp, body, radius, tip, label):
-    """Fillet every sharp edge of the body. If that fails, try a smaller
-    radius, then leave the edges at the pointed tip alone."""
-    tip_pt = adsk.core.Point3D.create(cm(X_SIGN * tip[0]), cm(tip[1]), 0.0)
-
-    def away_from_tip(e):
-        return all(v.geometry.distanceTo(tip_pt) > 0.5 for v in (e.startVertex, e.endVertex))
-    attempts = [(radius, is_sharp), (radius / 2.0, is_sharp),
-                (radius, lambda e: is_sharp(e) and away_from_tip(e)),
-                (radius / 2.0, lambda e: is_sharp(e) and away_from_tip(e))]
-    for r, keep in attempts:
-        edges = adsk.core.ObjectCollection.create()
-        for i in range(body.edges.count):
-            if keep(body.edges.item(i)):
-                edges.add(body.edges.item(i))
-        if edges.count == 0:
-            return
-        try:
-            inp = comp.features.filletFeatures.createInput()
-            try:
-                inp.edgeSetInputs.addConstantRadiusEdgeSet(edges, vi(r), True)
-            except AttributeError:
-                inp.addConstantRadiusEdgeSet(edges, vi(r), True)
-            comp.features.filletFeatures.add(inp)
-            return
-        except Exception:
-            continue
-    _skipped.append('{}: could not smooth the crease'.format(label))
-
-
-def build_3d_heart(comp, name, lobes, z_scale, crease_r=0.0):
-    """Puffy heart: each lobe is a ball + cone revolved to the shared tip;
-    the two are joined, the crease between them smoothed, then the whole
-    thing squashed side to side to the wanted thickness."""
-    made = []
-    for i, (tip, c, r) in enumerate(lobes):
-        loop, end = lobe_half_section(tip, c, r)
-        sk = side_sketch(comp, '{} lobe {}'.format(name, i + 1), [loop])
-        made.append(revolve_new(comp, sk, '{} lobe {}'.format(name, i + 1), tip, end))
-    combine_join(comp, made[0], made[1:])
-    body = body_named(comp, '{} lobe 1'.format(name))
-    body.name = name
-    if crease_r > 0:
-        smooth_creases(comp, body, crease_r, lobes[0][0], name)
-        body = body_named(comp, name)
-    try:
-        coll = adsk.core.ObjectCollection.create()
-        coll.add(body)
-        scales = comp.features.scaleFeatures
-        inp = scales.createInput(coll, comp.originConstructionPoint, adsk.core.ValueInput.createByReal(1.0))
-        one = adsk.core.ValueInput.createByReal(1.0)
-        inp.setToNonUniform(one, one, adsk.core.ValueInput.createByReal(z_scale))
-        scales.add(inp)
-    except Exception:
-        _skipped.append('{}: could not squash it side to side, so it is fully round'.format(name))
-    return body
+        _skipped.append('{}: dome loft failed, used a rounded thick heart instead'.format(name))
+    body = extrude_sym(comp, profile, 2.0 * half_t, NEW, name=name).bodies.item(0)
+    fillet(comp, body, 0.45 * 2.0 * half_t, name, edge_filter=flat_in('z'))
+    return body_named(comp, name)
 
 
 def build_charm(root):
@@ -1284,21 +1176,6 @@ def apply_colors(app, design):
                             break
                     made[rgb] = ap
                 b.appearance = made[rgb]
-                # faces marked with their own colour (e.g. the heart's cream centre)
-                for k in range(b.faces.count):
-                    f = b.faces.item(k)
-                    attr = f.attributes.itemByName('celestia', 'color')
-                    frgb = BODY_COLORS.get(attr.value) if attr else None
-                    if frgb:
-                        if frgb not in made:
-                            fap = design.appearances.addByCopy(base, 'Celestia {} {} {}'.format(*frgb))
-                            for m in range(fap.appearanceProperties.count):
-                                prop = adsk.core.ColorProperty.cast(fap.appearanceProperties.item(m))
-                                if prop:
-                                    prop.value = adsk.core.Color.create(frgb[0], frgb[1], frgb[2], 255)
-                                    break
-                            made[frgb] = fap
-                        f.appearance = made[frgb]
     except Exception:
         _skipped.append('Colours skipped (appearance library unavailable)')
 
