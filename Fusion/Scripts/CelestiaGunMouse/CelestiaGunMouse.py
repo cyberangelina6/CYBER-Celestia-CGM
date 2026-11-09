@@ -142,8 +142,8 @@ INSET_SCALE = 0.8           # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
-LOOP_START = (-22.0, -1.0)  # inside the heart's rear lobe
-LOOP_MID = (-28.0, -15.0)   # how far back it bows (further back = more curved)
+LOOP_START = (-24.0, -2.0)  # inside the heart's rear lobe
+LOOP_MID = (-13.0, -14.0)   # bows in toward the grip (bigger first number = more)
 LOOP_END = (-8.0, -30.0)    # well inside the back of the grip, so it fuses on
 LOOP_T_START, LOOP_T_END = 7.0, 5.0
 
