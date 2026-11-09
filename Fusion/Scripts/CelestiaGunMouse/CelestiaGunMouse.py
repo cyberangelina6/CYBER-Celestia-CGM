@@ -138,6 +138,7 @@ CAP_TILT_DEG = 40.0         # tilts the tip forward/down into the slide
 CAP_DEPTH = 30.0            # thickness at the fullest part of the lobes
 CAP_INSET_SCALE = 0.85      # size of the cream heart inside the cap
 CAP_INSET_PROUD = 2.0       # how far the cream centre bulges out of each side
+CAP_CREASE_R = 6.0          # smooths the crease where the two lobes meet
 INSET_SCALE = 0.8           # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
@@ -1130,15 +1131,75 @@ def build_button(root):
 def build_rear_cap(root):
     comp = new_component(root, 'Rear Cap (Heart)')
     zs, zs_in = cap_z_scales()
-    build_3d_heart(comp, 'Heart cap', heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG), zs)
-    build_3d_heart(comp, 'Heart inset',
-                   heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True), zs_in)
+    big = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG)
+    small = heart_lobes(CAP_HEART_W, CAP_CENTER, CAP_TILT_DEG, CAP_INSET_SCALE, inset=True)
+    build_3d_heart(comp, 'Heart cap', big, zs, CAP_CREASE_R)
+    build_3d_heart(comp, 'Heart inset', small, zs_in, CAP_CREASE_R * CAP_INSET_SCALE)
+
+    # Fuse the cream centre into the heart so it is one solid, soften where
+    # the cream bulge meets the heart, then mark the bulge faces cream.
+    combine_join(comp, body_named(comp, 'Heart cap'), [body_named(comp, 'Heart inset')])
+    cap = body_named(comp, 'Heart cap')
+    smooth_creases(comp, cap, 1.2, big[0][0], 'Heart cream edge')
+    cap = body_named(comp, 'Heart cap')
+    for i in range(cap.faces.count):
+        f = cap.faces.item(i)
+        p = f.pointOnFace
+        x, y, z = X_SIGN * p.x * 10, p.y * 10, abs(p.z * 10)
+        z_big = zs * heart_half_thickness(big, (x, y))
+        z_cream = zs_in * heart_half_thickness(small, (x, y))
+        if z_cream > z_big and z_cream - 0.6 <= z <= z_cream + 2.0:   # on the cream bulge
+            f.attributes.add('celestia', 'color', 'Heart inset')
     return comp
 
 
-def build_3d_heart(comp, name, lobes, z_scale):
+def is_sharp(edge, min_deg=10.0):
+    """True if the two faces meet at a real corner (not a smooth join)."""
+    try:
+        if edge.faces.count != 2:
+            return False
+        p = edge.pointOnEdge
+        ok1, n1 = edge.faces.item(0).evaluator.getNormalAtPoint(p)
+        ok2, n2 = edge.faces.item(1).evaluator.getNormalAtPoint(p)
+        return ok1 and ok2 and n1.angleTo(n2) > math.radians(min_deg)
+    except Exception:
+        return False
+
+
+def smooth_creases(comp, body, radius, tip, label):
+    """Fillet every sharp edge of the body. If that fails, try a smaller
+    radius, then leave the edges at the pointed tip alone."""
+    tip_pt = adsk.core.Point3D.create(cm(X_SIGN * tip[0]), cm(tip[1]), 0.0)
+
+    def away_from_tip(e):
+        return all(v.geometry.distanceTo(tip_pt) > 0.5 for v in (e.startVertex, e.endVertex))
+    attempts = [(radius, is_sharp), (radius / 2.0, is_sharp),
+                (radius, lambda e: is_sharp(e) and away_from_tip(e)),
+                (radius / 2.0, lambda e: is_sharp(e) and away_from_tip(e))]
+    for r, keep in attempts:
+        edges = adsk.core.ObjectCollection.create()
+        for i in range(body.edges.count):
+            if keep(body.edges.item(i)):
+                edges.add(body.edges.item(i))
+        if edges.count == 0:
+            return
+        try:
+            inp = comp.features.filletFeatures.createInput()
+            try:
+                inp.edgeSetInputs.addConstantRadiusEdgeSet(edges, vi(r), True)
+            except AttributeError:
+                inp.addConstantRadiusEdgeSet(edges, vi(r), True)
+            comp.features.filletFeatures.add(inp)
+            return
+        except Exception:
+            continue
+    _skipped.append('{}: could not smooth the crease'.format(label))
+
+
+def build_3d_heart(comp, name, lobes, z_scale, crease_r=0.0):
     """Puffy heart: each lobe is a ball + cone revolved to the shared tip;
-    the two are joined, then squashed side to side to the wanted thickness."""
+    the two are joined, the crease between them smoothed, then the whole
+    thing squashed side to side to the wanted thickness."""
     made = []
     for i, (tip, c, r) in enumerate(lobes):
         loop, end = lobe_half_section(tip, c, r)
@@ -1147,6 +1208,9 @@ def build_3d_heart(comp, name, lobes, z_scale):
     combine_join(comp, made[0], made[1:])
     body = body_named(comp, '{} lobe 1'.format(name))
     body.name = name
+    if crease_r > 0:
+        smooth_creases(comp, body, crease_r, lobes[0][0], name)
+        body = body_named(comp, name)
     try:
         coll = adsk.core.ObjectCollection.create()
         coll.add(body)
@@ -1220,6 +1284,21 @@ def apply_colors(app, design):
                             break
                     made[rgb] = ap
                 b.appearance = made[rgb]
+                # faces marked with their own colour (e.g. the heart's cream centre)
+                for k in range(b.faces.count):
+                    f = b.faces.item(k)
+                    attr = f.attributes.itemByName('celestia', 'color')
+                    frgb = BODY_COLORS.get(attr.value) if attr else None
+                    if frgb:
+                        if frgb not in made:
+                            fap = design.appearances.addByCopy(base, 'Celestia {} {} {}'.format(*frgb))
+                            for m in range(fap.appearanceProperties.count):
+                                prop = adsk.core.ColorProperty.cast(fap.appearanceProperties.item(m))
+                                if prop:
+                                    prop.value = adsk.core.Color.create(frgb[0], frgb[1], frgb[2], 255)
+                                    break
+                            made[frgb] = fap
+                        f.appearance = made[frgb]
     except Exception:
         _skipped.append('Colours skipped (appearance library unavailable)')
 
