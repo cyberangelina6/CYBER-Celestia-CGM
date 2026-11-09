@@ -143,9 +143,9 @@ INSET_SCALE = 0.8           # cream inner heart size on the flange
 # Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
 LOOP_START = (-22.0, -1.0)  # inside the heart's rear lobe
-LOOP_MID = (-21.0, -19.0)
-LOOP_END = (-14.0, -37.0)   # inside the grip back piece
-LOOP_T_START, LOOP_T_END = 7.0, 4.0
+LOOP_MID = (-28.0, -15.0)   # how far back it bows (further back = more curved)
+LOOP_END = (-8.0, -30.0)    # well inside the back of the grip, so it fuses on
+LOOP_T_START, LOOP_T_END = 7.0, 5.0
 
 # Charm (heart padlock) hanging from an eyelet at the front of the frame
 EYELET_CENTER = (120.0, -15.0)
