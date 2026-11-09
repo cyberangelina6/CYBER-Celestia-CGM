@@ -1085,34 +1085,41 @@ def build_rear_cap(root):
     return comp
 
 
+DOME_STEPS_DEG = (0.0, 30.0, 55.0, 72.0, 84.0)   # slices of the puffy heart
+
+
 def build_dome_heart(comp, name, outline, peak, half_t):
-    """Loft from a point half_t in front, through the heart outline, to a
-    point half_t behind, rounding into each point. Falls back to a thick
-    heart with fully rounded edges if Fusion won't make the loft."""
-    sk = side_sketch(comp, '{} outline'.format(name), [outline])
-    profile = pick_profile(sk)
+    """Puffy heart: a loft through heart outlines stacked side to side, full
+    size in the middle and shrinking smoothly (an elliptical profile) toward
+    each side. Falls back to a thick heart with rounded edges if the loft
+    can't be made."""
+    def scaled(f):
+        return [(seg[0],) + tuple((peak[0] + f * (q[0] - peak[0]), peak[1] + f * (q[1] - peak[1]))
+                                  for q in seg[1:]) for seg in outline]
     try:
-        ends = []
-        for sgn in (1, -1):
-            pl = offset_plane(comp, comp.xYConstructionPlane, sgn * half_t, 'z', sgn * half_t)
-            psk = comp.sketches.add(pl)
-            psk.name = '{} peak {}'.format(name, 'left' if sgn > 0 else 'right')
-            ends.append(psk.sketchPoints.add(sk_point(psk, peak[0], peak[1], sgn * half_t)))
+        profiles = []
+        angles = [-a for a in reversed(DOME_STEPS_DEG[1:])] + list(DOME_STEPS_DEG)
+        for a in angles:
+            z = half_t * math.sin(math.radians(a))
+            f = math.cos(math.radians(a))
+            plane = None
+            if abs(z) > 1e-6:
+                plane = offset_plane(comp, comp.xYConstructionPlane, z, 'z', z)
+            sk = side_sketch(comp, '{} slice {:+.0f}'.format(name, a), [scaled(f)], plane=plane)
+            profiles.append(pick_profile(sk))
         lofts = comp.features.loftFeatures
         inp = lofts.createInput(NEW)
-        first = inp.loftSections.add(ends[0])
-        first.setPointTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
-        inp.loftSections.add(profile)
-        last = inp.loftSections.add(ends[1])
-        last.setPointTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
+        for pr in profiles:
+            inp.loftSections.add(pr)
         inp.isSolid = True
         body = lofts.add(inp).bodies.item(0)
         body.name = name
         return body
     except Exception:
-        _skipped.append('{}: dome loft failed, used a rounded thick heart instead'.format(name))
-    body = extrude_sym(comp, profile, 2.0 * half_t, NEW, name=name).bodies.item(0)
-    fillet(comp, body, 0.45 * 2.0 * half_t, name, edge_filter=flat_in('z'))
+        _skipped.append('{}: puffy loft failed, used a thick heart with rounded edges'.format(name))
+    sk = side_sketch(comp, '{} outline'.format(name), [outline])
+    body = extrude_sym(comp, pick_profile(sk), 2.0 * half_t, NEW, name=name).bodies.item(0)
+    fillet(comp, body, 0.4 * 2.0 * half_t, name, edge_filter=flat_in('z'))
     return body_named(comp, name)
 
 
