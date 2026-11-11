@@ -36,6 +36,9 @@ COORDINATES USED IN THIS FILE (millimetres)
 import math
 import traceback
 
+# Shown in the pop-up at the end of a run, so you can tell which version ran.
+SCRIPT_VERSION = 'v12: left/right split + trigger & ADS levers'
+
 import adsk.core
 import adsk.fusion
 
@@ -1619,7 +1622,7 @@ def run(context):
         apply_colors(app, design)
         app.activeViewport.fit()
 
-        msg = 'CYBER Celestia CGM built: {} parts.'.format(len(comps))
+        msg = 'CYBER Celestia CGM ({}) built: {} parts.'.format(SCRIPT_VERSION, len(comps))
         if _skipped:
             msg += '\n\nNotes:\n- ' + '\n- '.join(_skipped)
         msg += '\n\nWidths and depths: Modify > Change Parameters.'
