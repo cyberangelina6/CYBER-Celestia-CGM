@@ -151,7 +151,17 @@ seam_line, = ax.plot([p[0] for p in seam_pts], [p[1] for p in seam_pts], color='
 seam_line.set_clip_path(PathPatch(grip_poly, transform=ax.transData))
 ax.add_patch(PathPatch(grip_poly, fill=False, edgecolor='#5b1d5e', lw=1.3, zorder=3.2))
 draw(ax, [[('circle', cgm.GRIP_PIN, cgm.GRIP_PIN_R)]], C['Grip pin'], 3.2)
-draw(ax, [cgm.trigger_outline()], C['Trigger'], 2.7)
+for loop in cgm.trigger_loops():
+    draw(ax, [loop], C['Trigger'], 3.6, edge='none')
+for loop in cgm.ads_loops():
+    draw(ax, [loop], C['ADS lever'], 3.6, edge='none')
+for (x0, x1, y0, y1) in (cgm.TRIGGER_SWITCH, cgm.ADS_SWITCH):
+    draw(ax, [rect(x0, y0, x1, y1)], C['Switch (reference)'], 3.7)
+for pivot in (cgm.TRIGGER_PIVOT, cgm.ADS_PIVOT):
+    draw(ax, [[('circle', pivot, cgm.PIVOT_PIN_R)]], (255, 255, 255), 3.8)
+for host, posts in cgm.SCREW_POSTS.items():
+    for pos in posts:
+        draw(ax, [[('circle', pos, cgm.POST_R)], [('circle', pos, cgm.SCREW_CLEAR_R)]], (180, 180, 190), 7.5)
 ring, tab = cgm.eyelet_loops()
 draw(ax, [tab], C['Frame & Grip'], 3)
 draw(ax, ring, C['Frame & Grip'], 3)
@@ -204,7 +214,7 @@ ax.plot([cgm.EYELET_CENTER[0], bail[1][0]], [cgm.EYELET_CENTER[1] - cgm.EYELET_R
 labels = {
     'slide': (100, 16), 'barrel': (150, y), 'shroud': (cgm.FLANGE_X + 3, f_bot - 4),
     'front sight': (cgm.FLANGE_X + 3, sight_top + 5), 'rear cap': (-8, 30),
-    'grip loop': (-30, -28), 'grip': (15, -45), 'trigger': (52, -38), 'readout': (103, -18),
+    'grip loop': (-30, -28), 'grip': (15, -45), 'trigger': (52, -25), 'ADS': (44, -38), 'readout': (103, -18),
     'charm': (cgm.CHARM_CENTER[0], cgm.CHARM_CENTER[1] - 15), 'reload': (47, 44),
     'ears': (32, 47),
 }

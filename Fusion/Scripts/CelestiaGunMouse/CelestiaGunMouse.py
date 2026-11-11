@@ -98,6 +98,28 @@ RECENTER_POS = (3.0, -22.0)       # on the grip's left side
 SIDE_BUTTON_D = 10.0
 SIDE_BUTTON_PROUD = 1.5           # how far the round caps stick out
 
+# Trigger and ADS levers. Each swings on a 3 mm steel pin; pulling it pushes
+# a nub at its back through a slot in the grip front onto a lever
+# microswitch (~20 x 10 x 6 mm) lying across the grip, lever facing forward.
+PIVOT_PIN_R = 1.6                 # hole in the shell for the 3 mm pin
+TRIGGER_PIVOT = (42.0, -6.0)      # inside the frame
+ADS_PIVOT = (33.0, -24.5)         # inside the grip front, under the trigger
+TRIGGER_SWITCH = (19.0, 29.0, -19.0, -13.0)   # x0, x1, y0, y1 of the switch body
+ADS_SWITCH = (18.0, 28.0, -34.0, -28.0)
+SWITCH_HALF_LEN = 10.0            # half its 20 mm length (it lies across the grip)
+
+# Left/right split and M3 screws. Screws go in from the RIGHT side (heads
+# hidden there) into heat-set inserts in the LEFT half.
+SCREW_POSTS = {
+    'Slide': [(120.0, 4.0), (120.0, 22.0), (14.0, 4.0)],
+    'Frame & Grip': [(72.0, -5.0), (-16.0, -50.0)],
+    'Grip panel': [(12.0, -40.0)],
+}
+POST_R = 3.5
+INSERT_R, INSERT_DEPTH = 2.0, 5.7     # M3 heat-set insert hole
+SCREW_CLEAR_R = 1.7                   # M3 clearance hole
+HEAD_R, HEAD_DEPTH = 3.0, 3.2         # recess for the screw head
+
 # Barrel and muzzle (revolved around a horizontal axis)
 BORE_AXIS_Y = 11.0          # height of the barrel centreline
 BARREL_R = 15.0
@@ -154,10 +176,10 @@ GRIP_PIN_R = 2.2
 
 # Trigger guard (compact loop in front of the grip)
 GUARD_OUT_FRONT_X = 70.0
-GUARD_OUT_BOTTOM_Y = -36.0
+GUARD_OUT_BOTTOM_Y = -40.0  # taller opening: the trigger AND the ADS lever fit inside
 GUARD_IN_REAR_X = 38.0
 GUARD_IN_FRONT_X = 66.0
-GUARD_IN_BOTTOM_Y = -32.0
+GUARD_IN_BOTTOM_Y = -36.0
 GUARD_WEB_DROP = 11.0       # how far down the grip front the guard blends in
 
 # Heart rear cap: a puffy 3D heart (doubles as a palm rest)
@@ -220,6 +242,8 @@ BODY_COLORS = {
     'Grip panel': GRIP_PINK,
     'Grip pin': (190, 45, 135),
     'Trigger': (200, 70, 160),
+    'ADS lever': (200, 70, 160),
+    'Switch (reference)': (150, 150, 160),
     'Reload button': (225, 60, 150),
     'Infuse button': (225, 60, 150),
     'Recenter button': (250, 206, 245),
@@ -585,14 +609,38 @@ def guard_loops():
     return [outer, inner]
 
 
-def trigger_outline():
-    h = FRAME_H
+def trigger_loops():
+    """Trigger pieces (joined into one part): a boss round the pivot, an arm
+    down through the frame, the curved finger blade and the nub at the back
+    that presses the switch."""
+    px, py = TRIGGER_PIVOT
     return [
-        ('line', (48, -h), (55, -h)),
-        ('arc', (55, -h), (51, -h - 8), (56, -h - 15)),
-        ('line', (56, -h - 15), (53, -h - 16.5)),
-        ('arc', (53, -h - 16.5), (46, -h - 9), (48, -h)),
+        [('circle', (px, py), 3.8)],
+        polygon([(px - 3.5, -14.0), (px + 3.5, -14.0), (px + 3.5, py), (px - 3.5, py)]),
+        [('line', (40.5, -13.0), (49.0, -13.0)),
+         ('arc', (49.0, -13.0), (46.0, -17.0), (49.0, -21.5)),
+         ('line', (49.0, -21.5), (46.5, -23.0)),
+         ('arc', (46.5, -23.0), (41.5, -18.0), (40.5, -13.0))],
+        polygon([(TRIGGER_SWITCH[1] + 2.5, -17.5), (px - 2.0, -17.5), (px - 2.0, -14.5),
+                 (TRIGGER_SWITCH[1] + 2.5, -14.5)]),
     ]
+
+
+def ads_loops():
+    """ADS lever pieces: a boss round its pivot, a block through the slot in
+    the grip front, and the finger pad in the guard below the trigger."""
+    px, py = ADS_PIVOT
+    sw = ADS_SWITCH
+    return [
+        [('circle', (px, py), 3.5)],
+        polygon([(sw[1] + 2.0, sw[2] + 1.5), (px + 5.0, sw[2] + 1.5), (px + 5.0, py), (sw[1] + 2.0, py)]),
+        polygon([(px + 4.0, sw[2] + 1.0), (px + 11.5, sw[2] + 1.0), (px + 11.5, py - 1.5), (px + 4.0, py - 1.5)]),
+    ]
+
+
+def trigger_outline():
+    """Just the finger blade (used by the preview)."""
+    return trigger_loops()[2]
 
 
 def eyelet_loops():
@@ -931,7 +979,74 @@ def build_slide(root):
         _skipped.append('Slide: could not hollow it out')
     cut_top_openings(comp, body_named(comp, 'Slide'))
     cut_side_hole(comp, body_named(comp, 'Slide'), INFUSE_POS, slide_half_width(INFUSE_POS[1]), 'Infuse hole')
+    add_posts(comp, 'Slide')
+    halves = split_left_right(comp, 'Slide')
+    if halves:
+        screw_holes(comp, 'Slide', *halves)
     return comp
+
+
+def wall_z(host, pos):
+    """(outer face, inner face) of the left wall at a screw post, in z mm."""
+    if host == 'Slide':
+        return slide_half_width(pos[1]), slide_half_width(pos[1]) - WALL
+    if host == 'Frame & Grip' and pos[1] > -FRAME_H:
+        return FRAME_W / 2.0, FRAME_W / 2.0 - WALL
+    return P_GRIP_W / 2.0, GRIP_CAVITY_HALF_W
+
+
+def add_posts(comp, host):
+    """Screw posts spanning the hollow from wall to wall, joined to host."""
+    tools = []
+    for i, pos in enumerate(SCREW_POSTS[host]):
+        _, inner = wall_z(host, pos)
+        sk = side_sketch(comp, '{} screw post {}'.format(host, i + 1), [[('circle', pos, POST_R)]])
+        tools.append(extrude_sym(comp, pick_profile(sk), 2.0 * (inner + 0.8), NEW,
+                                 name='Screw post').bodies.item(0))
+    combine_join(comp, body_named(comp, host), tools)
+
+
+def split_left_right(comp, name):
+    """Split a body down the middle (z = 0) into '<name> L' and '<name> R'."""
+    others = set(b.entityToken for b in bodies(comp) if b.name != name)
+    try:
+        splits = comp.features.splitBodyFeatures
+        splits.add(splits.createInput(body_named(comp, name), comp.xYConstructionPlane, True))
+    except Exception:
+        _skipped.append('{}: could not split into left and right halves'.format(name))
+        return None
+    left = right = None
+    # the halves are the solids that weren't there before (Fusion names the
+    # new one "Body..."), so find them by elimination
+    for b in bodies(comp):
+        if b.entityToken in others or not b.isSolid:
+            continue
+        bb = b.boundingBox
+        if bb.maxPoint.z + bb.minPoint.z > 0:
+            b.name, left = name + ' L', b
+        else:
+            b.name, right = name + ' R', b
+    return (left, right) if left and right else None
+
+
+def screw_holes(comp, host, left, right):
+    """Insert holes in the left half; clearance holes with a recess for the
+    screw head in the right half (screws go in from the right)."""
+    for i, pos in enumerate(SCREW_POSTS[host]):
+        outer, _ = wall_z(host, pos)
+        try:
+            sk = side_sketch(comp, '{} insert {}'.format(host, i + 1), [[('circle', pos, INSERT_R)]],
+                             plane=xy_plane(comp, INSERT_DEPTH / 2.0))
+            extrude_sym(comp, pick_profile(sk), INSERT_DEPTH, CUT, participants=[body_named(comp, host + ' L')])
+            sk = side_sketch(comp, '{} screw hole {}'.format(host, i + 1), [[('circle', pos, SCREW_CLEAR_R)]],
+                             plane=xy_plane(comp, -(outer + 1.0) / 2.0))
+            extrude_sym(comp, pick_profile(sk), outer + 1.0, CUT, participants=[body_named(comp, host + ' R')])
+            z_far, z_near = -(outer + 1.0), -(outer - HEAD_DEPTH)
+            sk = side_sketch(comp, '{} screw head {}'.format(host, i + 1), [[('circle', pos, HEAD_R)]],
+                             plane=xy_plane(comp, (z_far + z_near) / 2.0))
+            extrude_sym(comp, pick_profile(sk), z_near - z_far, CUT, participants=[body_named(comp, host + ' R')])
+        except Exception:
+            _skipped.append('{}: screw {} holes skipped'.format(host, i + 1))
 
 
 def combine_cut(comp, target, tools, keep=False):
@@ -1098,7 +1213,49 @@ def build_frame(root):
     frame = body_named(comp, 'Frame')
     frame.name = 'Frame & Grip'
     hollow_frame_and_grip(comp)
+    lever_mounts(comp)
+    for host in ('Frame & Grip', 'Grip panel'):
+        add_posts(comp, host)
+        halves = split_left_right(comp, host)
+        if halves:
+            screw_holes(comp, host, *halves)
     return comp
+
+
+def lever_mounts(comp):
+    """Slots for the trigger and ADS lever, their pin holes, and stops behind
+    the two microswitches."""
+    def frame():
+        return body_named(comp, 'Frame & Grip')
+
+    def panel():
+        return body_named(comp, 'Grip panel')
+    tw = 7.0 + 2 * CLEAR                     # trigger_width + clearance
+    px, py = TRIGGER_PIVOT
+    ax_, ay = ADS_PIVOT
+    cuts = [
+        ('Trigger arm slot', polygon([(px - 4.5, -FRAME_H - 1.5), (px + 5.5, -FRAME_H - 1.5),
+                                      (px + 5.5, -FRAME_H + 3.0), (px - 4.5, -FRAME_H + 3.0)]), tw, 'both'),
+        ('Trigger nub slot', polygon([(TRIGGER_SWITCH[1], -18.5), (px - 4.0, -18.5),
+                                      (px - 4.0, -13.5), (TRIGGER_SWITCH[1], -13.5)]), 5.0 + 2 * CLEAR, 'panel'),
+        ('ADS lever slot', polygon([(ADS_SWITCH[1] + 0.5, ADS_SWITCH[2]), (ax_ + 6.0, ADS_SWITCH[2]),
+                                    (ax_ + 6.0, ay + 4.0), (ADS_SWITCH[1] + 0.5, ay + 4.0)]), tw, 'panel'),
+        ('Trigger pin hole', [('circle', TRIGGER_PIVOT, PIVOT_PIN_R)], 60.0, 'both'),
+        ('ADS pin hole', [('circle', ADS_PIVOT, PIVOT_PIN_R)], 60.0, 'both'),
+    ]
+    for name, loop, width, which in cuts:
+        try:
+            sk = side_sketch(comp, name, [loop])
+            targets = [panel()] if which == 'panel' else [frame(), panel()]
+            extrude_sym(comp, pick_profile(sk), width, CUT, participants=targets)
+        except Exception:
+            _skipped.append('Frame & Grip: {} skipped'.format(name))
+    stops = []
+    for label, (x0, x1, y0, y1) in (('Trigger switch stop', TRIGGER_SWITCH), ('ADS switch stop', ADS_SWITCH)):
+        sk = side_sketch(comp, label, [polygon([(x0 - 4.0, y0), (x0, y0), (x0, y1), (x0 - 4.0, y1)])])
+        stops.append(extrude_sym(comp, pick_profile(sk), 2.0 * GRIP_CAVITY_HALF_W + 1.0, NEW,
+                                 name='Switch stop').bodies.item(0))
+    combine_join(comp, panel(), stops)
 
 
 def hollow_frame_and_grip(comp):
@@ -1205,12 +1362,41 @@ def add_oval_base(comp):
            edge_filter=lambda e: e.boundingBox.maxPoint.y * 10 < GRIP_BASE_Y + 0.1)
 
 
+def build_lever(comp, name, loops, pivot):
+    """Extrude each piece, join them, and drill the pivot hole."""
+    made = []
+    for i, loop in enumerate(loops):
+        sk = side_sketch(comp, '{} piece {}'.format(name, i + 1), [loop])
+        made.append(extrude_sym(comp, pick_profile(sk), 'trigger_width', NEW,
+                                name='{} piece {}'.format(name, i + 1)).bodies.item(0))
+    combine_join(comp, made[0], made[1:])
+    body = body_named(comp, '{} piece 1'.format(name))
+    body.name = name
+    sk = side_sketch(comp, '{} pivot hole'.format(name), [[('circle', pivot, PIVOT_PIN_R + 0.15)]])
+    extrude_sym(comp, pick_profile(sk), 20.0, CUT, participants=[body])
+    fillet(comp, body_named(comp, name), 0.6, name, edge_filter=flat_in('z'))
+    return body_named(comp, name)
+
+
 def build_trigger(root):
     comp = new_component(root, 'Trigger')
-    sk = side_sketch(comp, 'Trigger profile', [trigger_outline()])
-    body = extrude_sym(comp, pick_profile(sk), 'trigger_width', NEW, name='Trigger').bodies.item(0)
-    top = -FRAME_H / 10.0 - 0.05
-    fillet(comp, body, FILLET_SMALL, 'Trigger', edge_filter=lambda e: e.boundingBox.maxPoint.y < top)
+    build_lever(comp, 'Trigger', trigger_loops(), TRIGGER_PIVOT)
+    return comp
+
+
+def build_ads(root):
+    comp = new_component(root, 'ADS Lever')
+    build_lever(comp, 'ADS lever', ads_loops(), ADS_PIVOT)
+    return comp
+
+
+def build_switch_refs(root):
+    """Grey stand-ins for the two lever microswitches, to check the fit.
+    Not printed."""
+    comp = new_component(root, 'Switches (reference)')
+    for label, (x0, x1, y0, y1) in (('Trigger switch', TRIGGER_SWITCH), ('ADS switch', ADS_SWITCH)):
+        sk = side_sketch(comp, label, [polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])])
+        extrude_sym(comp, pick_profile(sk), 2.0 * SWITCH_HALF_LEN, NEW, name='Switch (reference)')
     return comp
 
 
@@ -1348,6 +1534,8 @@ COMPONENT_COLORS = {
     'Muzzle & Shroud': BODY_COLORS['Barrel'],
     'Frame & Grip': BODY_COLORS['Frame & Grip'],
     'Trigger': BODY_COLORS['Trigger'],
+    'ADS Lever': BODY_COLORS['ADS lever'],
+    'Switches (reference)': BODY_COLORS['Switch (reference)'],
     'Reload Button': BODY_COLORS['Reload button'],
     'Infuse Button': BODY_COLORS['Infuse button'],
     'Recenter Button': BODY_COLORS['Recenter button'],
@@ -1377,7 +1565,8 @@ def apply_colors(app, design):
         occs = design.rootComponent.allOccurrences
         for comp in [occs.item(i).component for i in range(occs.count)]:
             for b in bodies(comp):
-                rgb = BODY_COLORS.get(b.name) or COMPONENT_COLORS.get(comp.name)
+                base_name = b.name[:-2] if b.name.endswith((' L', ' R')) else b.name   # split halves
+                rgb = BODY_COLORS.get(base_name) or COMPONENT_COLORS.get(comp.name)
                 if not rgb or not b.isSolid:
                     continue
                 if rgb not in made:
@@ -1417,7 +1606,8 @@ def run(context):
         comps = []
         for label, builder in (('Slide', build_slide), ('Muzzle & Shroud', build_muzzle),
                                ('Frame & Grip', build_frame),
-                               ('Trigger', build_trigger), ('Reload Button', build_button),
+                               ('Trigger', build_trigger), ('ADS Lever', build_ads),
+                               ('Switches (reference)', build_switch_refs), ('Reload Button', build_button),
                                ('Infuse Button', build_infuse), ('Recenter Button', build_recenter),
                                ('LED Window', build_led_window),
                                ('Rear Cap (Heart)', build_rear_cap), ('Charm', build_charm)):
