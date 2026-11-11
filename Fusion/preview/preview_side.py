@@ -179,7 +179,18 @@ cream = [(seg[0],) + tuple((pc[0] + 0.72 * (q[0] - pc[0]), pc[1] + 0.72 * (q[1] 
          for seg in cream]
 draw(ax, [cream], C['Heart inset'], 5.1)
 draw(ax, [cgm.ears_outline()], C['Frame & Grip'], 5.5)
-draw(ax, [cgm.button_outline()], C['Top button'], 5.5)
+draw(ax, [cgm.button_outline()], C['Reload button'], 5.5)
+x0, x1 = cgm.LED_WINDOW_X
+draw(ax, [rect(x0, cgm.SLIDE_H - cgm.TOP_STRIP_H, x1, cgm.SLIDE_H)], C['LED window'], 6.7)
+ax.text((x0 + x1) / 2, cgm.SLIDE_H + 3.5, 'LED window', ha='center', fontsize=8, color='#3b0f3d', zorder=20)
+for pos, key, lab in ((cgm.INFUSE_POS, 'Infuse button', 'infuse'), (cgm.RECENTER_POS, 'Recenter button', 'recenter')):
+    draw(ax, [[('circle', pos, cgm.SIDE_BUTTON_D / 2)]], C[key], 7)
+    ax.text(pos[0], pos[1] - cgm.SIDE_BUTTON_D / 2 - 3, lab, ha='center', va='top', fontsize=8,
+            color='#3b0f3d', zorder=20, bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.8))
+ax.add_patch(PathPatch(compound([cgm.stadium(cgm.BOARD_CENTER[0], cgm.BOARD_CENTER[1], *cgm.USB_HOLE)]),
+                       fill=False, edgecolor='#5b1d5e', lw=1.0, ls='--', zorder=7))
+ax.text(cgm.BOARD_CENTER[0] - 7, cgm.BOARD_CENTER[1], 'USB-C\n(right side)', ha='right', va='center',
+        fontsize=7, color='#3b0f3d', zorder=20)
 draw(ax, [cgm.slide_outline()], C['Slide'], 6)
 for s in cgm.serration_outlines():
     draw(ax, [s], (170, 40, 120), 6.5)
@@ -194,7 +205,7 @@ labels = {
     'slide': (100, 16), 'barrel': (150, y), 'shroud': (cgm.FLANGE_X + 3, f_bot - 4),
     'front sight': (cgm.FLANGE_X + 3, sight_top + 5), 'rear cap': (-8, 30),
     'grip loop': (-30, -28), 'grip': (15, -45), 'trigger': (52, -38), 'readout': (103, -18),
-    'charm': (cgm.CHARM_CENTER[0], cgm.CHARM_CENTER[1] - 15), 'top button': (47, 44),
+    'charm': (cgm.CHARM_CENTER[0], cgm.CHARM_CENTER[1] - 15), 'reload': (47, 44),
     'ears': (32, 47),
 }
 for text, (lx, ly) in labels.items():

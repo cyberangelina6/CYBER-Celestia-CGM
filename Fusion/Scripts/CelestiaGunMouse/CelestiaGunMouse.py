@@ -12,8 +12,12 @@ WHAT YOU GET (one component per part of the sketch)
   Slide (grooves), Muzzle & Shroud (barrel, heart flange, front sight ring,
   muzzle rings), Frame & Grip (one light-pink piece: top strip, cat ears,
   frame, readout window, trigger guard, grip back strip, grip loop, charm
-  eyelet; plus the dark grip panel and oval base), Trigger, Top Button,
+  eyelet; plus the dark grip panel and oval base), Trigger, Reload Button
+  (top), Infuse Button and Recenter Button (left side), LED Window,
   Rear Cap (puffy 3D heart) and Charm (heart padlock).
+  The slide, frame and grip are hollow inside for the electronics, with
+  openings for the LED stick, buttons, readout and a USB-C port on the grip's
+  right side (see "Inside the gun" in DIMENSIONS).
 
 EDITING
   * Thicknesses (side-to-side widths, cut depths) are live Fusion parameters:
@@ -65,9 +69,34 @@ EARS_GAP = 6.0              # gap between the two ears
 TOP_STRIP_H = 3.0           # thickness of the strip along the top
 REAR_STRIP_W = 5.0          # width of the strip down the slanted back
 
-# Top button (pill on top of the slide)
-BUTTON_X0, BUTTON_X1 = 40.0, 54.0
+# Reload button (pill on top of the slide)
+BUTTON_X0, BUTTON_X1 = 40.0, 54.0   # the reload button (pill on top of the slide)
 BUTTON_H = 5.0
+RELOAD_W = 9.0                      # its width, side to side
+
+# ---- Inside the gun (parts from the "Gun Controller - Parts Rundown" doc) ----
+# Measure your parts with calipers when they arrive and adjust these.
+WALL = 2.5                  # shell wall thickness
+CLEAR = 0.25                # gap around moving parts and lids
+SLIDE_CAVITY_TOP = SLIDE_H - TOP_STRIP_H - 2.0   # inside roof of the slide
+FRAME_CAVITY_X = (8.0, 124.0)                     # hollow inside the frame
+GRIP_CAVITY_BOTTOM = -52.0                        # hollow grip goes down to here
+GRIP_CAVITY_HALF_W = 11.0                         # half width of the grip hollow
+# QT Py board (21.7 x 17.8 x 5.7 mm) stands in the grip with its USB-C end at
+# the grip's RIGHT side, so the cable leaves from the side.
+BOARD_CENTER = (-6.0, -40.0)
+USB_HOLE = (7.5, 13.0)            # opening for the plug (front-back, up-down)
+USB_RECESS = (10.0, 15.5, 2.2)    # pocket around it for the plug's grip (w, h, depth)
+# NeoPixel stick (51.1 x 10.2 x 3.2 mm) on top of the slide between the wings,
+# under a translucent window printed in clear/natural PETG.
+LED_WINDOW_X = (62.0, 114.0)
+LED_WINDOW_W = 11.0
+# 12 mm tactile buttons: reload = the pill on top, infuse and recenter are
+# round caps on the left side where your thumb rests.
+INFUSE_POS = (30.0, 14.0)         # on the slide's left side
+RECENTER_POS = (3.0, -22.0)       # on the grip's left side
+SIDE_BUTTON_D = 10.0
+SIDE_BUTTON_PROUD = 1.5           # how far the round caps stick out
 
 # Barrel and muzzle (revolved around a horizontal axis)
 BORE_AXIS_Y = 11.0          # height of the barrel centreline
@@ -142,10 +171,10 @@ INSET_SCALE = 0.8           # cream inner heart size on the flange
 
 # Grip loop: tapered band from the heart down into the grip back piece
 INCLUDE_GRIP_LOOP = True
-LOOP_START = (-24.0, -2.0)  # inside the heart's rear lobe
-LOOP_MID = (-13.0, -14.0)   # bows in toward the grip (bigger first number = more)
+LOOP_START = (-20.0, -2.0)  # inside the heart's rear lobe
+LOOP_MID = (-11.5, -14.0)   # bows in toward the grip (bigger first number = more)
 LOOP_END = (-8.0, -30.0)    # well inside the back of the grip, so it fuses on
-LOOP_T_START, LOOP_T_END = 7.0, 5.0
+LOOP_T_START, LOOP_T_END = 6.0, 4.5
 
 # Charm (heart padlock) hanging from an eyelet at the front of the frame
 EYELET_CENTER = (120.0, -15.0)
@@ -165,16 +194,17 @@ LIVE_PARAMS = [
     ('grip_width', 30.0, 'Grip panel (dark pink) thickness, side to side'),
     ('guard_width', 12.0, 'Trigger guard thickness'),
     ('trigger_width', 7.0, 'Trigger blade thickness'),
-    ('button_width', 9.0, 'Top button width'),
     ('flange_width', 6.0, 'Heart flange (shroud) thickness'),
     ('inset_proud', 1.5, 'How far the cream heart insets stand out'),
-    ('loop_width', 10.0, 'Grip loop thickness'),
+    ('loop_width', 8.0, 'Grip loop thickness'),
     ('sight_thickness', 3.0, 'Front sight ring thickness'),
     ('charm_thickness', 4.0, 'Heart charm thickness'),
     ('eyelet_thickness', 3.5, 'Charm eyelet thickness'),
     ('serration_depth', 0.8, 'Depth of the slide grooves'),
-    ('readout_depth', 1.5, 'Depth of the readout window recess'),
+    ('readout_depth', 4.0, 'Readout window cut (deeper than the wall = open to the hollow inside)'),
 ]
+
+P_GRIP_W = dict((n, v) for n, v, _ in LIVE_PARAMS)['grip_width']
 
 # Colours from the sketch (R, G, B), by body name
 CREAM = (252, 240, 185)
@@ -190,7 +220,10 @@ BODY_COLORS = {
     'Grip panel': GRIP_PINK,
     'Grip pin': (190, 45, 135),
     'Trigger': (200, 70, 160),
-    'Top button': (225, 60, 150),
+    'Reload button': (225, 60, 150),
+    'Infuse button': (225, 60, 150),
+    'Recenter button': (250, 206, 245),
+    'LED window': (255, 240, 250),
     'Heart cap': (240, 196, 240),
     'Heart inset': CREAM,
     'Charm': (215, 55, 145),
@@ -299,6 +332,38 @@ def arc_band(p0, pm, p1, t_start, t_end):
     o = [off(p, t) for p, t in zip((p0, pm, p1), ts)]
     i = [off(p, -t) for p, t in zip((p0, pm, p1), ts)]
     return [('arc', o[0], o[1], o[2]), ('line', o[2], i[2]), ('arc', i[2], i[1], i[0]), ('line', i[0], o[0])]
+
+
+def slide_cavity_outline():
+    """Side view of the hollow inside the slide (open at the bottom into the frame)."""
+    top = SLIDE_CAVITY_TOP
+    back = REAR_STRIP_W + 2.0           # stays clear of the light-pink back band
+    return polygon([(slide_rear_x(-0.5) + back, -0.5), (BARREL_X0, -0.5),
+                    (BARREL_X0, top), (slide_rear_x(top) + back, top)])
+
+
+def slide_cavity_section():
+    lo, hi = -1.0, SLIDE_CAVITY_TOP + 1.0
+    return polygon([(-(slide_half_width(lo) - WALL), lo), (slide_half_width(lo) - WALL, lo),
+                    (slide_half_width(hi) - WALL, hi), (-(slide_half_width(hi) - WALL), hi)])
+
+
+def grip_cavity_outline():
+    """Side view of the hollow inside the grip (opens up into the frame)."""
+    top, bot = -FRAME_H + 4.0, GRIP_CAVITY_BOTTOM
+    return polygon([(spine_rear_x(top) + 3.0, top), (PANEL_FRONT[0][0] - 5.5, top),
+                    (PANEL_FRONT[2][0] - 3.0, PANEL_FRONT[2][1] - 5.0), (PANEL_FRONT[3][0] - 5.0, bot),
+                    (spine_rear_x(bot) + 3.0, bot)])
+
+
+def stadium(cx, cy, w, h):
+    """Rounded slot w wide (front-back) and h tall (h > w)."""
+    r = w / 2.0
+    k = h / 2.0 - r
+    return [('line', (cx + r, cy - k), (cx + r, cy + k)),
+            ('arc', (cx + r, cy + k), (cx, cy + h / 2.0), (cx - r, cy + k)),
+            ('line', (cx - r, cy + k), (cx - r, cy - k)),
+            ('arc', (cx - r, cy - k), (cx, cy - h / 2.0), (cx + r, cy - k))]
 
 
 def slide_points():
@@ -855,7 +920,59 @@ def build_slide(root):
             extrude_sym(comp, all_profiles(sk), 'serration_depth * 2', CUT, participants=[slide])
         except Exception:
             _skipped.append('Slide: {} grooves skipped'.format(label))
+
+    # Hollow inside (room for the IMU, wiring and LED stick)
+    try:
+        sk = side_sketch(comp, 'Slide hollow', [slide_cavity_outline()])
+        cav = extrude_sym(comp, pick_profile(sk), SLIDE_BOTTOM_W + 10.0, NEW, name='Slide hollow').bodies.item(0)
+        trim_to_section(comp, cav, slide_cavity_section(), 'Slide hollow')
+        combine_cut(comp, body_named(comp, 'Slide'), [body_named(comp, 'Slide hollow')])
+    except Exception:
+        _skipped.append('Slide: could not hollow it out')
+    cut_top_openings(comp, body_named(comp, 'Slide'))
+    cut_side_hole(comp, body_named(comp, 'Slide'), INFUSE_POS, slide_half_width(INFUSE_POS[1]), 'Infuse hole')
     return comp
+
+
+def combine_cut(comp, target, tools, keep=False):
+    coll = adsk.core.ObjectCollection.create()
+    for t in tools:
+        coll.add(t)
+    inp = comp.features.combineFeatures.createInput(target, coll)
+    inp.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
+    inp.isKeepToolBodies = keep
+    comp.features.combineFeatures.add(inp)
+
+
+def xy_plane(comp, z):
+    if abs(z) < 1e-9:
+        return comp.xYConstructionPlane
+    return offset_plane(comp, comp.xYConstructionPlane, z, 'z', z)
+
+
+def cut_top_openings(comp, body):
+    """The LED window and the reload button slot through the top."""
+    y0, y1 = SLIDE_CAVITY_TOP - 0.5, SLIDE_H + 1.0
+    for name, x0, x1, w in (('LED window opening', LED_WINDOW_X[0], LED_WINDOW_X[1], LED_WINDOW_W),
+                            ('Reload slot', BUTTON_X0 - CLEAR, BUTTON_X1 + CLEAR,
+                             RELOAD_W + 2 * CLEAR)):
+        try:
+            sk = side_sketch(comp, name, [polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])])
+            extrude_sym(comp, pick_profile(sk), w, CUT, participants=[body])
+        except Exception:
+            _skipped.append('{}: {} skipped'.format(comp.name, name))
+
+
+def cut_side_hole(comp, bodies_to_cut, pos, z_outer, name, r=None):
+    """Round hole through the LEFT wall (+Z) at side-view position pos."""
+    r = r or (SIDE_BUTTON_D / 2.0 + CLEAR)
+    if not isinstance(bodies_to_cut, list):
+        bodies_to_cut = [bodies_to_cut]
+    try:
+        sk = side_sketch(comp, name, [[('circle', pos, r)]], plane=xy_plane(comp, z_outer - WALL / 2.0))
+        extrude_sym(comp, pick_profile(sk), WALL + 4.0, CUT, participants=bodies_to_cut)
+    except Exception:
+        _skipped.append('{}: {} skipped'.format(comp.name, name))
 
 
 def trim_to_section(comp, body, section_loop, label):
@@ -980,7 +1097,43 @@ def build_frame(root):
                                if b.name not in ('Frame', 'Grip panel', 'Grip pin')])
     frame = body_named(comp, 'Frame')
     frame.name = 'Frame & Grip'
+    hollow_frame_and_grip(comp)
     return comp
+
+
+def hollow_frame_and_grip(comp):
+    """Hollow the frame and grip (one connected space with the slide's), and
+    cut the top openings, the recenter hole and the USB-C port."""
+    frame, panel = body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')
+    try:
+        x0, x1 = FRAME_CAVITY_X
+        hw = FRAME_W / 2.0 - WALL
+        sk = side_sketch(comp, 'Frame hollow', [polygon([(x0, -FRAME_H + 2.0), (x1, -FRAME_H + 2.0),
+                                                         (x1, 0.5), (x0, 0.5)])])
+        extrude_sym(comp, pick_profile(sk), 2.0 * hw, NEW, name='Frame hollow')
+        sk = side_sketch(comp, 'Grip hollow', [grip_cavity_outline()])
+        extrude_sym(comp, pick_profile(sk), 2.0 * GRIP_CAVITY_HALF_W, NEW, name='Grip hollow')
+        tools = [body_named(comp, 'Frame hollow'), body_named(comp, 'Grip hollow')]
+        combine_cut(comp, panel, tools, keep=True)
+        combine_cut(comp, body_named(comp, 'Frame & Grip'),
+                    [body_named(comp, 'Frame hollow'), body_named(comp, 'Grip hollow')])
+    except Exception:
+        _skipped.append('Frame & Grip: could not hollow it out')
+    frame, panel = body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')
+    cut_top_openings(comp, frame)
+    cut_side_hole(comp, [frame, panel], RECENTER_POS, P_GRIP_W / 2.0, 'Recenter hole')
+
+    # USB-C port on the grip's right side (-Z), with a pocket for the plug
+    bx, by = BOARD_CENTER
+    zr = -P_GRIP_W / 2.0
+    for name, w, h, depth in (('USB-C recess', USB_RECESS[0], USB_RECESS[1], USB_RECESS[2]),
+                              ('USB-C hole', USB_HOLE[0], USB_HOLE[1], 8.0)):
+        try:
+            sk = side_sketch(comp, name, [stadium(bx, by, w, h)], plane=xy_plane(comp, zr))
+            extrude_sym(comp, pick_profile(sk), 2.0 * depth, CUT,
+                        participants=[body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')])
+        except Exception:
+            _skipped.append('Frame & Grip: {} skipped'.format(name))
 
 
 def split_grip(comp):
@@ -1062,10 +1215,60 @@ def build_trigger(root):
 
 
 def build_button(root):
-    comp = new_component(root, 'Top Button')
+    """Reload button: the pill on top, with a stem down through its slot and
+    a flange underneath that stops it falling out. The 12 mm tactile switch
+    sits under the flange."""
+    comp = new_component(root, 'Reload Button')
     sk = side_sketch(comp, 'Button profile', [button_outline()])
-    body = extrude_sym(comp, pick_profile(sk), 'button_width', NEW, name='Top button').bodies.item(0)
-    fillet(comp, body, 2.0, 'Top button', edge_filter=flat_in('z'))
+    body = extrude_sym(comp, pick_profile(sk), RELOAD_W, NEW, name='Reload button').bodies.item(0)
+    fillet(comp, body, 2.0, 'Reload button', edge_filter=flat_in('z'))
+    y_in = SLIDE_CAVITY_TOP
+    sk = side_sketch(comp, 'Reload stem', [polygon([(BUTTON_X0, y_in), (BUTTON_X1, y_in),
+                                                    (BUTTON_X1, SLIDE_H), (BUTTON_X0, SLIDE_H)])])
+    extrude_sym(comp, pick_profile(sk), RELOAD_W, JOIN, participants=[body_named(comp, 'Reload button')])
+    sk = side_sketch(comp, 'Reload flange', [polygon([(BUTTON_X0 - 1.5, y_in - 1.0), (BUTTON_X1 + 1.5, y_in - 1.0),
+                                                      (BUTTON_X1 + 1.5, y_in), (BUTTON_X0 - 1.5, y_in)])])
+    extrude_sym(comp, pick_profile(sk), RELOAD_W + 3.0, JOIN, participants=[body_named(comp, 'Reload button')])
+    return comp
+
+
+def build_side_button(root, comp_name, body_name, pos, z_outer, z_in):
+    """Round button cap through the left wall (outer face at z_outer, inner
+    face at z_in), with a flange 1 mm clear of the inner face."""
+    comp = new_component(root, comp_name)
+    r = SIDE_BUTTON_D / 2.0
+    z0, z1 = z_in - 2.0, z_outer + SIDE_BUTTON_PROUD
+    sk = side_sketch(comp, body_name + ' cap', [[('circle', pos, r)]], plane=xy_plane(comp, (z0 + z1) / 2.0))
+    extrude_sym(comp, pick_profile(sk), z1 - z0, NEW, name=body_name)
+    sk = side_sketch(comp, body_name + ' flange', [[('circle', pos, r + 1.25)]],
+                     plane=xy_plane(comp, z_in - 1.5))
+    extrude_sym(comp, pick_profile(sk), 1.0, JOIN, participants=[body_named(comp, body_name)])
+    fillet(comp, body_named(comp, body_name), 1.0, body_name,
+           edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.z * 10 > z_outer)
+    return comp
+
+
+def build_infuse(root):
+    # the slide's walls lean in toward the top, so measure the inner face
+    # at the top of the button
+    top_y = INFUSE_POS[1] + SIDE_BUTTON_D / 2.0 + 1.25
+    return build_side_button(root, 'Infuse Button', 'Infuse button', INFUSE_POS,
+                             slide_half_width(INFUSE_POS[1]), slide_half_width(top_y) - WALL)
+
+
+def build_recenter(root):
+    return build_side_button(root, 'Recenter Button', 'Recenter button', RECENTER_POS, P_GRIP_W / 2.0,
+                             GRIP_CAVITY_HALF_W)
+
+
+def build_led_window(root):
+    """Translucent window over the LED stick, flush with the top."""
+    comp = new_component(root, 'LED Window')
+    x0, x1 = LED_WINDOW_X[0] + CLEAR, LED_WINDOW_X[1] - CLEAR
+    sk = side_sketch(comp, 'LED window', [polygon([(x0, SLIDE_H - TOP_STRIP_H), (x1, SLIDE_H - TOP_STRIP_H),
+                                                   (x1, SLIDE_H), (x0, SLIDE_H)])])
+    body = extrude_sym(comp, pick_profile(sk), LED_WINDOW_W - 2 * CLEAR, NEW, name='LED window').bodies.item(0)
+    fillet(comp, body, 0.8, 'LED window', edge_filter=lambda e: e.boundingBox.minPoint.y * 10 > SLIDE_H - 0.1)
     return comp
 
 
@@ -1145,7 +1348,10 @@ COMPONENT_COLORS = {
     'Muzzle & Shroud': BODY_COLORS['Barrel'],
     'Frame & Grip': BODY_COLORS['Frame & Grip'],
     'Trigger': BODY_COLORS['Trigger'],
-    'Top Button': BODY_COLORS['Top button'],
+    'Reload Button': BODY_COLORS['Reload button'],
+    'Infuse Button': BODY_COLORS['Infuse button'],
+    'Recenter Button': BODY_COLORS['Recenter button'],
+    'LED Window': BODY_COLORS['LED window'],
     'Rear Cap (Heart)': BODY_COLORS['Heart cap'],
     'Charm': BODY_COLORS['Charm'],
 }
@@ -1211,7 +1417,9 @@ def run(context):
         comps = []
         for label, builder in (('Slide', build_slide), ('Muzzle & Shroud', build_muzzle),
                                ('Frame & Grip', build_frame),
-                               ('Trigger', build_trigger), ('Top Button', build_button),
+                               ('Trigger', build_trigger), ('Reload Button', build_button),
+                               ('Infuse Button', build_infuse), ('Recenter Button', build_recenter),
+                               ('LED Window', build_led_window),
                                ('Rear Cap (Heart)', build_rear_cap), ('Charm', build_charm)):
             try:
                 comps.append(builder(root))
