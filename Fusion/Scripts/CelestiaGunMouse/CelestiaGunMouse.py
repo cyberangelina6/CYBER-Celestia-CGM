@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v24: smooth grip-to-base blend, helper sketches hidden'
+SCRIPT_VERSION = 'v25: rounded grip-to-base joint (replaces the v24 blend that failed)'
 
 import adsk.core
 import adsk.fusion
@@ -1552,29 +1552,30 @@ def add_oval_base(comp):
                                        sk_point(sk, cx + BASE_LENGTH / 2.0, y, 0.0),
                                        sk_point(sk, cx, y, BASE_WIDTH / 2.0))
     lofts = comp.features.loftFeatures
-
-    def loft(smooth):
-        inp = lofts.createInput(NEW)
-        top = inp.loftSections.add(section)
-        inp.loftSections.add(pick_profile(sk))
-        inp.isSolid = True
-        if smooth:
-            # Leave the grip's sides at the same angle they arrive at, so the
-            # base flows out of the grip instead of starting at a crease.
-            top.setTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
-        return lofts.add(inp)
-
-    try:
-        feat = loft(True)
-    except Exception:
-        _skipped.append('Smooth grip-to-base blend failed, used a plain one (small crease at the joint)')
-        feat = loft(False)
+    inp = lofts.createInput(NEW)
+    inp.loftSections.add(section)
+    inp.loftSections.add(pick_profile(sk))
+    inp.isSolid = True
+    feat = lofts.add(inp)
     base = feat.bodies.item(0)
     base.name = 'Base'
     combine_join(comp, body_named(comp, 'Grip'), [base])
     grip = body_named(comp, 'Grip')
     fillet(comp, grip, 3.0, 'Oval base edge',
            edge_filter=lambda e: e.boundingBox.maxPoint.y * 10 < GRIP_BASE_Y + 0.1)
+    # Round over the ring where the grip meets the base, so the base flows out
+    # of the grip instead of starting at a crease.
+    def at_joint(e):
+        bb = e.boundingBox
+        return abs(bb.minPoint.y * 10 - GRIP_CUT_Y) < 0.05 and abs(bb.maxPoint.y * 10 - GRIP_CUT_Y) < 0.05
+    for r in (8.0, 2.0):                    # fillet() also tries half of each
+        fillet(comp, body_named(comp, 'Grip'), r, 'Grip-to-base blend', edge_filter=at_joint)
+        if _skipped and _skipped[-1] == 'Grip-to-base blend: fillet skipped':
+            _skipped.pop()
+            continue
+        break
+    else:
+        _skipped.append('Grip-to-base blend: rounding skipped (small crease at the joint)')
 
 
 def build_lever(comp, name, loops, pivot):
