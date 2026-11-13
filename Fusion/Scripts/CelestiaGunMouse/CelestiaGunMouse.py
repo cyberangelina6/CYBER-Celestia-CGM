@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v20: barrel no longer pokes through the slide'
+SCRIPT_VERSION = 'v21: extra clearance for a one-shot print'
 
 import adsk.core
 import adsk.fusion
@@ -80,7 +80,7 @@ RELOAD_W = 9.0                      # its width, side to side
 # ---- Inside the gun (parts from the "Gun Controller - Parts Rundown" doc) ----
 # Measure your parts with calipers when they arrive and adjust these.
 WALL = 2.5                  # shell wall thickness
-CLEAR = 0.25                # gap around moving parts and lids
+CLEAR = 0.3                 # gap around moving parts and lids (forgiving for a first print)
 SLIDE_CAVITY_TOP = SLIDE_H - TOP_STRIP_H - 2.0   # inside roof of the slide
 # The frame is hollow inside too (one connected space with the slide and grip),
 # with a pocket behind the readout window under a thin lip.
