@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v22: sturdier puffy heart (tries simpler versions before giving up)'
+SCRIPT_VERSION = 'v23: longer, slimmer grip sized to hand measurements'
 
 import adsk.core
 import adsk.fusion
@@ -87,14 +87,14 @@ SLIDE_CAVITY_TOP = SLIDE_H - TOP_STRIP_H - 2.0   # inside roof of the slide
 FRAME_CAVITY_X = (8.0, 124.0)     # hollow inside the frame, back to front
 READOUT_LIP = 1.0                 # thin rim round the window that hides a screen's edges
 READOUT_POCKET_DEPTH = 8.0        # how deep the pocket goes into the frame
-GRIP_CAVITY_BOTTOM = -52.0                        # hollow grip goes down to here
+GRIP_CAVITY_BOTTOM = -80.0                        # hollow grip goes down to here
 GRIP_CAVITY_HALF_W = 11.5                         # half width of the grip hollow (23 mm: board is 21.7)
 # Arduino Nano ESP32 (45 x 18 mm, ~5 mm thick WITHOUT headers) stands upright
 # in the grip, USB-C end down; the port opens through the bottom of the base.
 # A pocket in the base holds its USB end; tape or hot-glue the top in place.
 # The Pololu LSM6DS33 IMU (23 x 13 mm) sits in the slide, wired with 4 wires.
 BOARD_SIZE = (45.0, 18.0, 5.0)    # length, width, thickness
-BOARD_X = 0.0                     # front-back position of the board's centre
+BOARD_X = -8.0                    # front-back position of the board's centre
 BOARD_FLOOR = 1.5                 # plastic under the board's USB end
 USB_HOLE = (7.5, 13.5)            # opening for the plug (front-back, side-to-side)
 # NeoPixel stick (51.1 x 10.2 x 3.2 mm) on top of the slide between the wings,
@@ -134,8 +134,8 @@ SWITCH_HALF_LEN = 10.0            # half its 20 mm length (it lies across the gr
 FASTENER = 'standoff'
 STANDOFF_POSTS = {
     'Slide': [(120.0, 5.5), (14.0, 5.5)],
-    'Frame & Grip': [(-16.0, -50.0)],
-    'Grip panel': [(12.0, -40.0)],
+    'Frame & Grip': [(-6.0, -38.0)],
+    'Grip panel': [(12.0, -40.0), (6.0, -72.0)],
 }
 STANDOFF_POST_R = 5.5
 STANDOFF_LEN = 13.0                   # hex body length
@@ -145,8 +145,8 @@ NUT_T = 2.4                           # M3 nut thickness
 NUT_DRIVER_R = 4.0                    # hole for a 5.5 mm nut driver
 SCREW_POSTS = {
     'Slide': [(120.0, 4.0), (120.0, 22.0), (14.0, 4.0)],
-    'Frame & Grip': [(72.0, -3.5), (-16.0, -50.0)],
-    'Grip panel': [(12.0, -40.0)],
+    'Frame & Grip': [(72.0, -3.5), (-6.0, -38.0)],
+    'Grip panel': [(12.0, -40.0), (6.0, -72.0)],
 }
 POST_R = 3.5
 INSERT_R, INSERT_DEPTH = 2.0, 5.7     # M3 heat-set insert hole
@@ -192,17 +192,20 @@ READOUT_Y0, READOUT_Y1 = -10.0, -2.0
 # Grip: one shape, split into a light-pink back piece and a darker front
 # panel that sit flush and share one flat, rounded base.
 SPINE_REAR_TOP_X = 1.0      # back of the grip where it meets y = 0
-SPINE_REAR_RAKE = 28.0      # degrees from vertical
+SPINE_REAR_RAKE = 22.0      # degrees from vertical
 SPINE_FRONT_TOP_X = 14.0    # colour seam (light/dark) at the frame bottom
-SPINE_FRONT_RAKE = 24.0
+SPINE_FRONT_RAKE = 22.0     # same as the back, so the light strip stays an even width
 # Front edge of the panel: a smooth curve through these points, top to bottom
-PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (31.5, -40.0), (33.0, -54.0), (32.0, -63.0)]
+# Sized from hand measurements (ANSUR II): about 60 mm below the trigger guard
+# for a 3-finger hold, and ~39 mm thick (as a round handle) all the way down.
+PANEL_FRONT = [(36.0, -10.0), (36.5, -22.0), (33.5, -33.0), (28.5, -44.0), (21.0, -56.0),
+               (16.5, -68.0), (11.5, -80.0), (6.5, -92.0)]
 # Flat oval base: below GRIP_CUT_Y the grip blends smoothly into a flat,
 # level bottom that is an ellipse when you flip the gun over.
-GRIP_CUT_Y = -50.0              # where the blend into the base starts
-GRIP_BASE_Y = -72.0             # the flat bottom
-BASE_CENTER_X = -2.0            # centre of the oval (front/back)
-BASE_LENGTH = 62.0              # oval length, front to back
+GRIP_CUT_Y = -78.0              # where the blend into the base starts
+GRIP_BASE_Y = -100.0            # the flat bottom
+BASE_CENTER_X = -13.0           # centre of the oval (front/back)
+BASE_LENGTH = 46.0              # oval length, front to back
 BASE_WIDTH = 34.0               # oval width, side to side
 GRIP_PIN = (19.0, -16.0)        # the little pin/screw at the top of the grip
 GRIP_PIN_R = 2.2
@@ -405,12 +408,22 @@ def slide_cavity_section():
                     (slide_half_width(hi) - WALL, hi), (-(slide_half_width(hi) - WALL), hi)])
 
 
+def front_x(y):
+    """x of the grip's front edge at height y (straight lines between the
+    PANEL_FRONT points, carried on past the ends)."""
+    pts = PANEL_FRONT
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if y1 <= y <= y0:
+            return x0 + (x1 - x0) * (y - y0) / (y1 - y0)
+    (x0, y0), (x1, y1) = (pts[0], pts[1]) if y > pts[0][1] else (pts[-2], pts[-1])
+    return x0 + (x1 - x0) * (y - y0) / (y1 - y0)
+
+
 def grip_cavity_outline():
     """Side view of the hollow inside the grip (opens up into the frame)."""
     top, bot = -FRAME_H + 4.0, GRIP_CAVITY_BOTTOM
-    return polygon([(spine_rear_x(top) + 3.0, top), (PANEL_FRONT[0][0] - 5.5, top),
-                    (PANEL_FRONT[2][0] - 3.0, PANEL_FRONT[2][1] - 5.0), (PANEL_FRONT[3][0] - 5.0, bot),
-                    (spine_rear_x(bot) + 3.0, bot)])
+    front = [(PANEL_FRONT[0][0] - 5.5, top)] + [(front_x(y) - 3.5, y) for y in (-33.0, -44.0, -56.0, -68.0, bot)]
+    return polygon([(spine_rear_x(top) + 3.0, top)] + front + [(spine_rear_x(bot) + 3.0, bot)])
 
 
 def stadium(cx, cy, w, h):
@@ -612,17 +625,18 @@ def grip_outline():
 def grip_seam():
     """Line splitting the grip into the light back piece and the dark panel,
     running right through the base."""
-    return [('line', (spine_front_x(0.0), 0.0), (spine_front_x(-90.0), -90.0))]
+    y_end = GRIP_BASE_Y - 15.0             # past the base so the split goes all the way through
+    return [('line', (spine_front_x(0.0), 0.0), (spine_front_x(y_end), y_end))]
 
 
 def guard_loops():
     h = FRAME_H
     fx, by = GUARD_OUT_FRONT_X, GUARD_OUT_BOTTOM_Y
-    rear = PANEL_FRONT[0][0] - 8.0          # hidden inside the grip panel
     # Under the guard, a curved web sweeps down into the front of the grip so
     # the guard flows into the grip panel instead of meeting it at a corner.
     web0 = (GUARD_IN_REAR_X + 6.0, by)
-    web1 = (PANEL_FRONT[2][0] + 0.5, by - GUARD_WEB_DROP)
+    web1 = (front_x(by - GUARD_WEB_DROP) - 1.0, by - GUARD_WEB_DROP)
+    rear = web1[0] - 4.0                    # hidden inside the grip panel
     web_mid = (web0[0] - 0.71 * (web0[0] - web1[0]), web1[1] + 0.71 * (web0[1] - web1[1]))
     outer = [
         ('line', (rear, -h + 2), (fx, -h + 2)),

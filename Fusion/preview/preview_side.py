@@ -131,6 +131,8 @@ def grip_side_silhouette():
             above.append(hits[-1])
         if q[1] >= cut:
             above.append(q)
+            if abs(q[1] - cut) < 1e-9:      # a vertex lying exactly on the cut
+                hits.append(q)
     xf, xb = max(h[0] for h in hits), min(h[0] for h in hits)
     bf = cgm.BASE_CENTER_X + cgm.BASE_LENGTH / 2
     bb = cgm.BASE_CENTER_X - cgm.BASE_LENGTH / 2
@@ -227,8 +229,8 @@ for text, (lx, ly) in labels.items():
     ax.annotate(text, (lx, ly), ha='center', va='center', fontsize=9, color='#3b0f3d', zorder=20,
                 bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
 ax.set_aspect('equal')
-ax.set_xlim(-45, 195)
-ax.set_ylim(-80, 55)
+ax.set_xlim(-50, 195)
+ax.set_ylim(cgm.GRIP_BASE_Y - 10, 55)
 ax.invert_xaxis()      # muzzle on the left, like the sketch
 ax.grid(True, color='#eee', zorder=-1)
 ax.set_title('Left side (mm)')
