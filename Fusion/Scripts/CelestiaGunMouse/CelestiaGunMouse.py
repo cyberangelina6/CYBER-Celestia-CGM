@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v18: mounts for the switches, Nano, IMU and LED stick'
+SCRIPT_VERSION = 'v19: sized to your parts (KW11 switches, Pololu IMU, standoffs)'
 
 import adsk.core
 import adsk.fusion
@@ -89,7 +89,7 @@ READOUT_LIP = 1.0                 # thin rim round the window that hides a scree
 READOUT_POCKET_DEPTH = 8.0        # how deep the pocket goes into the frame
 GRIP_CAVITY_BOTTOM = -52.0                        # hollow grip goes down to here
 GRIP_CAVITY_HALF_W = 11.5                         # half width of the grip hollow (23 mm: board is 21.7)
-# Arduino Nano ESP32 (45 x 18 mm, ~5 mm thick without headers) stands upright
+# Arduino Nano ESP32 (45 x 18 mm, ~5 mm thick WITHOUT headers) stands upright
 # in the grip, USB-C end down; the port opens through the bottom of the base.
 # A pocket in the base holds its USB end; tape or hot-glue the top in place.
 # The Pololu LSM6DS33 IMU (23 x 13 mm) sits in the slide, wired with 4 wires.
@@ -107,10 +107,10 @@ INFUSE_POS = (30.0, 14.0)         # on the slide's left side
 RECENTER_POS = (3.0, -17.5)       # on the grip's left side, above the Nano
 SIDE_BUTTON_D = 10.0
 SIDE_BUTTON_PROUD = 1.5           # how far the round caps stick out
-TACT_H = 7.3                      # total height of your 12 mm tactile buttons (body + plunger)
+TACT_H = 7.3                      # buy 12 x 12 x 7.3 mm tactile buttons (total height incl. plunger)
 TACT_SEAT = -0.2                  # side-button switches sit on columns in the RIGHT half, ending here
 # Where the IMU board lies, flat on the frame floor, lined up with the barrel
-IMU_SIZE = (22.9, 12.7)           # Pololu LSM6DS33 carrier
+IMU_SIZE = (22.9, 10.2)           # Pololu LSM6DS33 carrier (#2736): 0.9 x 0.4 x 0.1 in
 IMU_X = 63.5                      # its centre, front-back
 
 # Trigger and ADS levers. Each swings on a 3 mm steel pin; pulling it pushes
@@ -119,13 +119,14 @@ IMU_X = 63.5                      # its centre, front-back
 PIVOT_PIN_R = 1.6                 # hole in the shell for the 3 mm pin
 TRIGGER_PIVOT = (42.0, -6.0)      # inside the frame
 ADS_PIVOT = (33.0, -24.5)         # inside the grip front, under the trigger
-TRIGGER_SWITCH = (19.0, 29.0, -19.0, -13.0)   # x0, x1, y0, y1 of the switch body
-ADS_SWITCH = (18.0, 28.0, -34.0, -28.0)
+# Switch bodies sized for the common KW11-3Z lever microswitch: 20 x 10.3 x 6.4 mm
+TRIGGER_SWITCH = (18.7, 29.0, -19.2, -12.8)   # x0, x1, y0, y1 of the switch body
+ADS_SWITCH = (17.7, 28.0, -34.2, -27.8)
 SWITCH_HALF_LEN = 10.0            # half its 20 mm length (it lies across the grip)
 
 # Left/right split. How the halves are held together:
 #   'standoff' - your 4 M3 nylon standoffs (13 mm body, 6 mm male thread, M/F)
-#                with their nuts. Each standoff sits hidden in a hex pocket in
+#                with their nuts. Each standoff is glued into a round pocket in
 #                the LEFT half; its thread pokes into the RIGHT half, where the
 #                nut goes on through a hole for a 5.5 mm nut driver. Glue each
 #                colour piece to its neighbour on the same side first.
@@ -138,7 +139,7 @@ STANDOFF_POSTS = {
 }
 STANDOFF_POST_R = 5.5
 STANDOFF_LEN = 13.0                   # hex body length
-STANDOFF_HEX_AF = 5.0                 # across the flats of the hex body
+STANDOFF_POCKET_D = 7.1               # round pocket: fits a 5 or 6 mm hex body; glue it in
 STUD_LEN = 6.0                        # male thread length
 NUT_T = 2.4                           # M3 nut thickness
 NUT_DRIVER_R = 4.0                    # hole for a 5.5 mm nut driver
@@ -1071,17 +1072,16 @@ def fastener_holes(comp, host, left, right):
 
 
 def standoff_holes(comp, host):
-    """Hex pocket for the standoff body in the left half; a hole for its
-    thread and a nut-driver hole in the right half (the nut bears on the
-    bottom of that hole and pulls the halves together)."""
-    r_hex = (STANDOFF_HEX_AF + 0.2) / math.sqrt(3.0)
+    """Round pocket for the standoff body in the left half (glue it in, so
+    it can't turn); a hole for its thread and a nut-driver hole in the right
+    half (the nut bears on the bottom of that hole and pulls the halves
+    together)."""
     nut_seat = STUD_LEN - NUT_T - 0.2           # depth of the plastic under the nut
     for i, pos in enumerate(active_posts().get(host, [])):
         outer, _ = wall_z(host, pos)
-        hexagon = polygon([(pos[0] + r_hex * math.cos(math.radians(60 * k)),
-                            pos[1] + r_hex * math.sin(math.radians(60 * k))) for k in range(6)])
+        pocket = [('circle', pos, STANDOFF_POCKET_D / 2.0)]
         try:
-            sk = side_sketch(comp, '{} standoff pocket {}'.format(host, i + 1), [hexagon],
+            sk = side_sketch(comp, '{} standoff pocket {}'.format(host, i + 1), [pocket],
                              plane=xy_plane(comp, STANDOFF_LEN / 2.0))
             extrude_sym(comp, pick_profile(sk), STANDOFF_LEN, CUT, participants=[body_named(comp, host + ' L')])
             sk = side_sketch(comp, '{} stud hole {}'.format(host, i + 1), [[('circle', pos, SCREW_CLEAR_R)]],
