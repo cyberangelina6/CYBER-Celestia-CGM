@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v19: sized to your parts (KW11 switches, Pololu IMU, standoffs)'
+SCRIPT_VERSION = 'v20: barrel no longer pokes through the slide'
 
 import adsk.core
 import adsk.fusion
@@ -155,7 +155,7 @@ HEAD_R, HEAD_DEPTH = 3.0, 3.2         # recess for the screw head
 
 # Barrel and muzzle (revolved around a horizontal axis)
 BORE_AXIS_Y = 11.0          # height of the barrel centreline
-BARREL_R = 15.0
+BARREL_R = 14.4                # stays inside the slide's leaning sides
 BARREL_X0 = 128.0           # starts inside the slide
 FLANGE_X = 162.0            # rear face of the heart flange (the "shroud")
 FLANGE_T = 6.0              # flange thickness
