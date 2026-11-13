@@ -34,10 +34,11 @@ COORDINATES USED IN THIS FILE (millimetres)
 """
 
 import math
+import os
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v25: rounded grip-to-base joint (replaces the v24 blend that failed)'
+SCRIPT_VERSION = 'v26: STL export for printing'
 
 import adsk.core
 import adsk.fusion
@@ -1799,6 +1800,131 @@ COMPONENT_COLORS = {
 }
 
 
+# -----------------------------------------------------------------------------
+# STL export for printing
+# -----------------------------------------------------------------------------
+# One entry per file to print: (file name, component, bodies, split in half).
+# Small colour accents (muzzle lip, sight bead, cream insets) overlap the part
+# they sit on, so they are merged into it: print that part in its main colour
+# and paint the accent. The puffy heart is round on both sides, so it is cut
+# in half to print each half flat side down (glue them back together).
+# The grip pin is only a painted detail (a real one would hit the trigger
+# switch), and the grey switches are stand-ins for parts you buy.
+PRINT_PARTS = [
+    ('Slide L', 'Slide', ['Slide L'], False),
+    ('Slide R', 'Slide', ['Slide R'], False),
+    ('Frame and grip L', 'Frame & Grip', ['Frame & Grip L'], False),
+    ('Frame and grip R', 'Frame & Grip', ['Frame & Grip R'], False),
+    ('Grip panel L', 'Frame & Grip', ['Grip panel L'], False),
+    ('Grip panel R', 'Frame & Grip', ['Grip panel R'], False),
+    ('Muzzle and shroud', 'Muzzle & Shroud',
+     ['Heart flange', 'Barrel', 'Muzzle lip', 'Sight bead', 'Flange inset'], False),
+    ('Trigger', 'Trigger', ['Trigger'], False),
+    ('ADS lever', 'ADS Lever', ['ADS lever'], False),
+    ('Reload button', 'Reload Button', ['Reload button'], False),
+    ('Infuse button', 'Infuse Button', ['Infuse button'], False),
+    ('Recenter button', 'Recenter Button', ['Recenter button'], False),
+    ('LED window', 'LED Window', ['LED window'], False),
+    ('Rear cap heart', 'Rear Cap (Heart)', ['Heart cap', 'Heart inset'], True),
+    ('Charm', 'Charm', ['Charm'], False),
+]
+
+
+def write_stl(design, body, path):
+    em = design.exportManager
+    opts = em.createSTLExportOptions(body, path)
+    settings = (('meshRefinement', lambda: adsk.fusion.MeshRefinementSettings.MeshRefinementHigh),
+                ('unitType', lambda: adsk.fusion.DistanceUnits.MillimeterDistanceUnits),   # print services expect mm
+                ('isBinaryFormat', lambda: True), ('sendToPrintUtility', lambda: False))
+    for attr, value in settings:
+        try:
+            setattr(opts, attr, value())
+        except Exception:
+            pass        # older Fusion: keep its default
+    if em.execute(opts) is False:
+        raise RuntimeError('export refused')
+
+
+def export_print_parts(design, folder):
+    """Write one STL per printable part into folder. Returns (files, notes)."""
+    root = design.rootComponent
+    comps = {}
+    for i in range(root.occurrences.count):
+        occ = root.occurrences.item(i)
+        comps[occ.component.name] = occ.component
+    files, notes = [], []
+    print_occ = None
+
+    def copy_in(body, name):
+        nonlocal print_occ
+        if print_occ is None:
+            print_occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+            print_occ.component.name = 'Print parts'
+        pc = print_occ.component
+        before = set(b.entityToken for b in bodies(pc))
+        body.copyToComponent(print_occ)
+        new = [b for b in bodies(pc) if b.entityToken not in before]
+        new[0].name = name
+        return new[0]
+
+    for fname, cname, names, halve in PRINT_PARTS:
+        comp = comps.get(cname)
+        src = []
+        for n in names:
+            try:
+                src.append(body_named(comp, n))
+            except Exception:
+                pass
+        if not src:
+            notes.append('{}: not exported (part missing from the model)'.format(fname))
+            continue
+        try:
+            if len(src) == 1 and not halve:
+                targets = [(fname, src[0])]
+            else:
+                main = copy_in(src[0], fname)
+                extras = [copy_in(b, '{} part {}'.format(fname, i + 2)) for i, b in enumerate(src[1:])]
+                pc = print_occ.component
+                combine_join(pc, main, extras)
+                targets = [(fname, body_named(pc, fname))]
+                if halve:
+                    halves = split_left_right(pc, fname)
+                    if halves:
+                        targets = [(fname + ' L', halves[0]), (fname + ' R', halves[1])]
+        except Exception:
+            # Fall back to the parts as modelled, one file each
+            notes.append('{}: could not merge or halve it, exported its pieces separately '
+                         '(the first one is the main part)'.format(fname))
+            targets = [('{} - {}'.format(fname, b.name), b) for b in src]
+        for n, b in targets:
+            try:
+                write_stl(design, b, os.path.join(folder, n + '.stl'))
+                files.append(n)
+            except Exception:
+                notes.append('{}: export failed'.format(n))
+    if print_occ is not None:
+        try:
+            print_occ.isLightBulbOn = False
+        except Exception:
+            pass
+    return files, notes
+
+
+def offer_export(ui, design):
+    dlg = ui.createFolderDialog()
+    dlg.title = 'Pick where to save the STL files (a new folder is made inside)'
+    if dlg.showDialog() != adsk.core.DialogResults.DialogOK:
+        return
+    folder = os.path.join(dlg.folder, 'CelestiaCGM STL ' + SCRIPT_VERSION.split(':')[0])
+    os.makedirs(folder, exist_ok=True)
+    files, notes = export_print_parts(design, folder)
+    msg = 'Saved {} STL files to:\n{}'.format(len(files), folder)
+    if notes:
+        msg += '\n\nNotes:\n- ' + '\n- '.join(notes)
+    msg += '\n\nSee Fusion/PRINTING.md for how to print each one.'
+    ui.messageBox(msg, 'CYBER Celestia CGM: STL export')
+
+
 def hide_helpers(design):
     """Turn off sketches and construction planes so only the parts show."""
     try:
@@ -1889,7 +2015,11 @@ def run(context):
         if _skipped:
             msg += '\n\nNotes:\n- ' + '\n- '.join(_skipped)
         msg += '\n\nWidths and depths: Modify > Change Parameters.'
-        ui.messageBox(msg, 'CYBER Celestia CGM')
+        msg += '\n\nSave STL files for printing now?'
+        answer = ui.messageBox(msg, 'CYBER Celestia CGM', adsk.core.MessageBoxButtonTypes.YesNoButtonType,
+                               adsk.core.MessageBoxIconTypes.QuestionIconType)
+        if answer == adsk.core.DialogResults.DialogYes:
+            offer_export(ui, design)
     except Exception:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))

@@ -8,6 +8,7 @@ My CGM specs, modelling and code
 | `reference/concept-sketch-v1.webp` | Concept sketch with labelled parts |
 | `Fusion/Scripts/CelestiaGunMouse/` | Fusion script that builds the starter model |
 | `Fusion/preview/` | Side-view preview of the script's outlines (no Fusion needed) |
+| `Fusion/PRINTING.md` | Exporting STL files and how to print each part |
 
 ## Building the model in Fusion
 
