@@ -74,6 +74,8 @@ def loop_vertices(loop):
             seg_pts = [seg[1], seg[2]]
         elif seg[0] == 'arc':
             seg_pts = arc_points(*seg[1:])
+        elif seg[0] == 'cspline':
+            seg_pts = spline_points(list(seg[1:]) + [seg[1]])
         else:
             seg_pts = spline_points(seg[1:])
         pts.extend(seg_pts if not pts else seg_pts[1:])

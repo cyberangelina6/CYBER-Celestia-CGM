@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v21: extra clearance for a one-shot print'
+SCRIPT_VERSION = 'v22: sturdier puffy heart (tries simpler versions before giving up)'
 
 import adsk.core
 import adsk.fusion
@@ -768,11 +768,13 @@ def draw_loops(sketch, loops, to3d):
                 curves.sketchArcs.addByThreePoints(sk_point(sketch, *to3d(seg[1])),
                                                    sk_point(sketch, *to3d(seg[2])),
                                                    sk_point(sketch, *to3d(seg[3])))
-            elif kind == 'spline':
+            elif kind in ('spline', 'cspline'):
                 pts = adsk.core.ObjectCollection.create()
                 for p in seg[1:]:
                     pts.add(sk_point(sketch, *to3d(p)))
-                curves.sketchFittedSplines.add(pts)
+                spl = curves.sketchFittedSplines.add(pts)
+                if kind == 'cspline':
+                    spl.isClosed = True
     _merge_endpoints(sketch)
 
 
@@ -1668,26 +1670,49 @@ def build_rear_cap(root):
 
 
 DOME_STEPS_DEG = (0.0, 30.0, 55.0, 72.0, 84.0)   # slices of the puffy heart
+DOME_STEPS_SIMPLE = (0.0, 40.0, 70.0)             # fewer slices, tried if that fails
+
+
+def smooth_outline(outline, n=40):
+    """The outline as one closed smooth curve (no sharp corners), sampled
+    from its lines and arcs. Lofts are much more reliable through these."""
+    pts = []
+    for seg in outline:
+        if seg[0] == 'line':
+            a, b = seg[1], seg[2]
+            pts += [(a[0] + (b[0] - a[0]) * t / 3.0, a[1] + (b[1] - a[1]) * t / 3.0) for t in range(3)]
+        elif seg[0] == 'arc':
+            p0, pm, p1 = seg[1:]
+            c, r = circle_through(p0, pm, p1)
+            a0_ = math.atan2(p0[1] - c[1], p0[0] - c[0])
+            am = math.atan2(pm[1] - c[1], pm[0] - c[0])
+            a1_ = math.atan2(p1[1] - c[1], p1[0] - c[0])
+            sweep = (a1_ - a0_) % (2 * math.pi)
+            if (am - a0_) % (2 * math.pi) > sweep:
+                sweep -= 2 * math.pi
+            k = 8
+            pts += [(c[0] + r * math.cos(a0_ + sweep * t / k), c[1] + r * math.sin(a0_ + sweep * t / k))
+                    for t in range(k)]
+    return [('cspline',) + tuple(pts)]
 
 
 def build_dome_heart(comp, name, outline, peak, half_t):
     """Puffy heart: a loft through heart outlines stacked side to side, full
     size in the middle and shrinking smoothly (an elliptical profile) toward
-    each side. Falls back to a thick heart with rounded edges if the loft
-    can't be made."""
-    def scaled(f):
+    each side. Tries the exact outline, then fewer slices, then a smoothed
+    outline; falls back to a thick heart with rounded edges if none works."""
+    def scaled(loop, f):
         return [(seg[0],) + tuple((peak[0] + f * (q[0] - peak[0]), peak[1] + f * (q[1] - peak[1]))
-                                  for q in seg[1:]) for seg in outline]
-    try:
+                                  for q in seg[1:]) for seg in loop]
+
+    def loft(loop, steps, tag):
         profiles = []
-        angles = [-a for a in reversed(DOME_STEPS_DEG[1:])] + list(DOME_STEPS_DEG)
+        angles = [-a for a in reversed(steps[1:])] + list(steps)
         for a in angles:
             z = half_t * math.sin(math.radians(a))
             f = math.cos(math.radians(a))
-            plane = None
-            if abs(z) > 1e-6:
-                plane = offset_plane(comp, comp.xYConstructionPlane, z, 'z', z)
-            sk = side_sketch(comp, '{} slice {:+.0f}'.format(name, a), [scaled(f)], plane=plane)
+            plane = offset_plane(comp, comp.xYConstructionPlane, z, 'z', z) if abs(z) > 1e-6 else None
+            sk = side_sketch(comp, '{} {} slice {:+.0f}'.format(name, tag, a), [scaled(loop, f)], plane=plane)
             profiles.append(pick_profile(sk))
         lofts = comp.features.loftFeatures
         inp = lofts.createInput(NEW)
@@ -1697,8 +1722,16 @@ def build_dome_heart(comp, name, outline, peak, half_t):
         body = lofts.add(inp).bodies.item(0)
         body.name = name
         return body
-    except Exception:
-        _skipped.append('{}: puffy loft failed, used a thick heart with rounded edges'.format(name))
+
+    first_error = None
+    smooth = smooth_outline(outline)
+    for loop, steps, tag in ((outline, DOME_STEPS_DEG, 'exact'), (outline, DOME_STEPS_SIMPLE, 'simple'),
+                             (smooth, DOME_STEPS_SIMPLE, 'smooth'), (smooth, DOME_STEPS_DEG, 'smooth fine')):
+        try:
+            return loft(loop, steps, tag)
+        except Exception as e:
+            first_error = first_error or str(e).strip().splitlines()[-1][:160]
+    _skipped.append('{}: puffy loft failed ({}), used a thick heart with rounded edges'.format(name, first_error))
     sk = side_sketch(comp, '{} outline'.format(name), [outline])
     body = extrude_sym(comp, pick_profile(sk), 2.0 * half_t, NEW, name=name).bodies.item(0)
     fillet(comp, body, 0.4 * 2.0 * half_t, name, edge_filter=flat_in('z'))
