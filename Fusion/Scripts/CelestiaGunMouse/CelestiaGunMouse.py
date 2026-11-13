@@ -15,9 +15,8 @@ WHAT YOU GET (one component per part of the sketch)
   eyelet; plus the dark grip panel and oval base), Trigger, Reload Button
   (top), Infuse Button and Recenter Button (left side), LED Window,
   Rear Cap (puffy 3D heart) and Charm (heart padlock).
-  The slide and grip are hollow inside for the electronics; the light-pink
-  frame stays solid apart from a pocket behind the readout and two small wire
-  channels. Openings for the LED stick, buttons, readout and a USB-C port on
+  The slide, frame and grip are hollow inside (one connected space) for the
+  electronics, with a pocket behind the readout window. Openings for the LED stick, buttons, readout and a USB-C port on
   the grip's right side (see "Inside the gun" in DIMENSIONS).
 
 EDITING
@@ -38,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v14: fixed readout + grooves cutting the whole side'
+SCRIPT_VERSION = 'v15: hollow inside for the electronics'
 
 import adsk.core
 import adsk.fusion
@@ -83,14 +82,13 @@ RELOAD_W = 9.0                      # its width, side to side
 WALL = 2.5                  # shell wall thickness
 CLEAR = 0.25                # gap around moving parts and lids
 SLIDE_CAVITY_TOP = SLIDE_H - TOP_STRIP_H - 2.0   # inside roof of the slide
-# The light-pink frame stays SOLID. Only a pocket behind the readout window is
-# hollow (room for a small screen later), plus two small hidden wire channels.
+# The frame is hollow inside too (one connected space with the slide and grip),
+# with a pocket behind the readout window under a thin lip.
+FRAME_CAVITY_X = (8.0, 124.0)     # hollow inside the frame, back to front
 READOUT_LIP = 1.0                 # thin rim round the window that hides a screen's edges
 READOUT_POCKET_DEPTH = 8.0        # how deep the pocket goes into the frame
-WIRE_CHANNEL_X = (16.0, 26.0)     # passage from the slide's hollow down into the grip's
-WIRE_GROOVE_Y = (-10.0, -8.0)     # thin groove from there forward to the readout pocket
 GRIP_CAVITY_BOTTOM = -52.0                        # hollow grip goes down to here
-GRIP_CAVITY_HALF_W = 11.0                         # half width of the grip hollow
+GRIP_CAVITY_HALF_W = 11.5                         # half width of the grip hollow (23 mm: board is 21.7)
 # QT Py board (21.7 x 17.8 x 5.7 mm) stands in the grip with its USB-C end at
 # the grip's RIGHT side, so the cable leaves from the side.
 BOARD_CENTER = (-6.0, -40.0)
@@ -1290,8 +1288,8 @@ def box_tool(comp, name, x0, x1, y0, y1, z0, z1):
 
 
 def hollow_frame_and_grip(comp):
-    """Hollow the grip (for the board), keep the frame solid except for the
-    readout pocket and two wire channels, and cut the top openings, the
+    """Hollow the grip (for the board) and the frame (joining the slide's and
+    grip's hollows), add the readout pocket, and cut the top openings, the
     recenter hole and the USB-C port."""
     frame, panel = body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')
     try:
@@ -1302,21 +1300,20 @@ def hollow_frame_and_grip(comp):
     except Exception:
         _skipped.append('Frame & Grip: could not hollow out the grip')
 
-    # Readout pocket (behind the window, under a thin lip) and the wire channels
+    # Frame hollow (open up into the slide and down into the grip) and the
+    # readout pocket (behind the window, under a thin lip)
     outer = FRAME_W / 2.0
+    hw = outer - WALL
     z_lip = outer - READOUT_LIP
     tools = [
+        box_tool(comp, 'Frame hollow', FRAME_CAVITY_X[0], FRAME_CAVITY_X[1], -FRAME_H + 2.0, 0.5, -hw, hw),
         box_tool(comp, 'Readout pocket', READOUT_X0 - 1.0, READOUT_X1 + 1.0,
                  READOUT_Y0 - 0.5, READOUT_Y1 + 0.5, z_lip - READOUT_POCKET_DEPTH, z_lip),
-        box_tool(comp, 'Wire channel', WIRE_CHANNEL_X[0], WIRE_CHANNEL_X[1],
-                 -FRAME_H + 2.0, 0.5, -6.0, 6.0),
-        box_tool(comp, 'Wire groove', WIRE_CHANNEL_X[1] - 1.0, READOUT_X0,
-                 WIRE_GROOVE_Y[0], WIRE_GROOVE_Y[1], -2.0, z_lip - READOUT_POCKET_DEPTH + 1.5),
     ]
     try:
         combine_cut(comp, body_named(comp, 'Frame & Grip'), tools)
     except Exception:
-        _skipped.append('Frame & Grip: readout pocket / wire channels skipped')
+        _skipped.append('Frame & Grip: could not hollow out the frame')
     frame, panel = body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')
     cut_top_openings(comp, frame)
     cut_side_hole(comp, [frame, panel], RECENTER_POS, P_GRIP_W / 2.0, 'Recenter hole')
