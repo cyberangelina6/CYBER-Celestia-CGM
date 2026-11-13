@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v17: Arduino Nano ESP32 + Pololu IMU, USB-C out the bottom'
+SCRIPT_VERSION = 'v18: mounts for the switches, Nano, IMU and LED stick'
 
 import adsk.core
 import adsk.fusion
@@ -107,6 +107,11 @@ INFUSE_POS = (30.0, 14.0)         # on the slide's left side
 RECENTER_POS = (3.0, -17.5)       # on the grip's left side, above the Nano
 SIDE_BUTTON_D = 10.0
 SIDE_BUTTON_PROUD = 1.5           # how far the round caps stick out
+TACT_H = 7.3                      # total height of your 12 mm tactile buttons (body + plunger)
+TACT_SEAT = -0.2                  # side-button switches sit on columns in the RIGHT half, ending here
+# Where the IMU board lies, flat on the frame floor, lined up with the barrel
+IMU_SIZE = (22.9, 12.7)           # Pololu LSM6DS33 carrier
+IMU_X = 63.5                      # its centre, front-back
 
 # Trigger and ADS levers. Each swings on a 3 mm steel pin; pulling it pushes
 # a nub at its back through a slot in the grip front onto a lever
@@ -1021,6 +1026,7 @@ def build_slide(root):
         _skipped.append('Slide: could not hollow it out')
     cut_top_openings(comp, body_named(comp, 'Slide'))
     cut_side_hole(comp, body_named(comp, 'Slide'), INFUSE_POS, slide_half_width(INFUSE_POS[1]), 'Infuse hole')
+    slide_mounts(comp)
     add_posts(comp, 'Slide')
     halves = split_left_right(comp, 'Slide')
     if halves:
@@ -1297,12 +1303,79 @@ def build_frame(root):
     frame.name = 'Frame & Grip'
     hollow_frame_and_grip(comp)
     lever_mounts(comp)
+    frame_mounts(comp)
     for host in ('Frame & Grip', 'Grip panel'):
         add_posts(comp, host)
         halves = split_left_right(comp, host)
         if halves:
             fastener_holes(comp, host, *halves)
     return comp
+
+
+def join_mounts(comp, host, boxes):
+    """Make each (name, x0, x1, y0, y1, z0, z1) box and join them to host."""
+    try:
+        tools = [box_tool(comp, *b) for b in boxes]
+        combine_join(comp, body_named(comp, host), tools)
+    except Exception:
+        _skipped.append('{}: mounts skipped'.format(host))
+
+
+def slide_mounts(comp):
+    """Inside the slide: a shelf under the reload switch, a column under the
+    infuse switch (right half), and two ledges holding the LED stick."""
+    rs = 6.5                                    # half of a 12 mm switch + margin
+    rx = (BUTTON_X0 + BUTTON_X1) / 2.0
+    shelf_top = SLIDE_CAVITY_TOP - 1.0 - TACT_H   # reload switch plunger meets the flange
+    w_shelf = slide_half_width(shelf_top) - WALL + 0.5
+    ix, iy = INFUSE_POS
+    x0, x1 = LED_WINDOW_X
+    led_bottom = SLIDE_H - TOP_STRIP_H - 3.2    # the stick sits right under the window
+    boxes = [
+        ('Reload switch shelf', rx - rs, rx + rs, shelf_top - 2.0, shelf_top, -w_shelf, w_shelf),
+        ('Infuse switch column', ix - rs, ix + rs, iy - rs, iy + rs,
+         -(slide_half_width(iy + rs) - WALL) - 0.5, TACT_SEAT),
+    ]
+    for side, label in ((1, 'left'), (-1, 'right')):
+        z_in, z_out = sorted((side * 4.0, side * 7.5))
+        boxes.append(('LED ledge ' + label, x0, x1, led_bottom - 1.5, led_bottom, z_in, z_out))
+        z_in, z_out = sorted((side * 5.6, side * 7.5))
+        boxes.append(('LED hanger ' + label, x0, x1, led_bottom - 1.5, SLIDE_CAVITY_TOP + 0.3, z_in, z_out))
+    join_mounts(comp, 'Slide', boxes)
+
+
+def frame_mounts(comp):
+    """Inside the frame and grip: ledges under the two microswitches, a
+    column under the recenter switch (right half), rails holding the top of
+    the Nano, and a cradle for the IMU on the frame floor."""
+    rs = 6.5
+    cx, cy = RECENTER_POS
+    bl, bw, bt = BOARD_SIZE
+    top = GRIP_BASE_Y + BOARD_FLOOR + bl
+    floor = -FRAME_H + 2.0
+    il, iw = IMU_SIZE
+    panel_boxes = [
+        ('Trigger switch ledge', TRIGGER_SWITCH[0] - 4.0, TRIGGER_SWITCH[1], TRIGGER_SWITCH[2] - 2.0,
+         TRIGGER_SWITCH[2], -SWITCH_HALF_LEN, SWITCH_HALF_LEN),
+        ('ADS switch ledge', ADS_SWITCH[0] - 4.0, ADS_SWITCH[1], ADS_SWITCH[2] - 2.0,
+         ADS_SWITCH[2], -SWITCH_HALF_LEN, SWITCH_HALF_LEN),
+    ]
+    frame_boxes = [
+        ('Recenter switch column', cx - rs, cx + rs, cy - rs, cy + rs, -GRIP_CAVITY_HALF_W - 0.5, TACT_SEAT),
+        ('IMU cradle end front', IMU_X + il / 2 + 0.3, IMU_X + il / 2 + 1.8, floor, floor + 2.0, -iw / 2 - 2, iw / 2 + 2),
+        ('IMU cradle end back', IMU_X - il / 2 - 1.8, IMU_X - il / 2 - 0.3, floor, floor + 2.0, -iw / 2 - 2, iw / 2 + 2),
+    ]
+    for side, label in ((1, 'left'), (-1, 'right')):
+        z_in, z_out = sorted((side * (bw / 2.0 - 1.3), side * (GRIP_CAVITY_HALF_W + 0.5)))
+        frame_boxes.append(('Nano rail ' + label, BOARD_X - 6.0, BOARD_X - bt / 2.0 - 0.25, top - 2.7, top,
+                            z_in, z_out))
+        frame_boxes.append(('Nano rail ' + label + ' 2', BOARD_X + bt / 2.0 + 0.25, BOARD_X + 6.0, top - 2.7, top,
+                            z_in, z_out))
+        z_in, z_out = sorted((side * (iw / 2 + 0.3), side * (iw / 2 + 2.0)))
+        frame_boxes.append(('IMU cradle side ' + label, IMU_X - il / 2, IMU_X + il / 2, floor, floor + 2.0,
+                            z_in, z_out))
+    join_mounts(comp, 'Grip panel', panel_boxes)
+    join_mounts(comp, 'Frame & Grip', frame_boxes)
 
 
 def lever_mounts(comp):
@@ -1533,7 +1606,8 @@ def build_button(root):
 
 def build_side_button(root, comp_name, body_name, pos, z_outer, z_in):
     """Round button cap through the left wall (outer face at z_outer, inner
-    face at z_in), with a flange 1 mm clear of the inner face."""
+    face at z_in), with a flange 1 mm clear of the inner face and a stem
+    reaching in to the tactile switch's plunger."""
     comp = new_component(root, comp_name)
     r = SIDE_BUTTON_D / 2.0
     z0, z1 = z_in - 2.0, z_outer + SIDE_BUTTON_PROUD
@@ -1542,6 +1616,12 @@ def build_side_button(root, comp_name, body_name, pos, z_outer, z_in):
     sk = side_sketch(comp, body_name + ' flange', [[('circle', pos, r + 1.25)]],
                      plane=xy_plane(comp, z_in - 1.5))
     extrude_sym(comp, pick_profile(sk), 1.0, JOIN, participants=[body_named(comp, body_name)])
+    plunger_top = TACT_SEAT + TACT_H
+    if plunger_top < z0:
+        sk = side_sketch(comp, body_name + ' stem', [[('circle', pos, 2.5)]],
+                         plane=xy_plane(comp, (plunger_top + z0 + 0.5) / 2.0))
+        extrude_sym(comp, pick_profile(sk), z0 + 0.5 - plunger_top, JOIN,
+                    participants=[body_named(comp, body_name)])
     fillet(comp, body_named(comp, body_name), 1.0, body_name,
            edge_filter=lambda e: flat_in('z')(e) and e.boundingBox.minPoint.z * 10 > z_outer)
     return comp
