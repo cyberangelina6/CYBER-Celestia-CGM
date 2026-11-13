@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v16: shell joined with your 4 nylon standoffs'
+SCRIPT_VERSION = 'v17: Arduino Nano ESP32 + Pololu IMU, USB-C out the bottom'
 
 import adsk.core
 import adsk.fusion
@@ -89,11 +89,14 @@ READOUT_LIP = 1.0                 # thin rim round the window that hides a scree
 READOUT_POCKET_DEPTH = 8.0        # how deep the pocket goes into the frame
 GRIP_CAVITY_BOTTOM = -52.0                        # hollow grip goes down to here
 GRIP_CAVITY_HALF_W = 11.5                         # half width of the grip hollow (23 mm: board is 21.7)
-# QT Py board (21.7 x 17.8 x 5.7 mm) stands in the grip with its USB-C end at
-# the grip's RIGHT side, so the cable leaves from the side.
-BOARD_CENTER = (-6.0, -40.0)
-USB_HOLE = (7.5, 13.0)            # opening for the plug (front-back, up-down)
-USB_RECESS = (10.0, 15.5, 2.2)    # pocket around it for the plug's grip (w, h, depth)
+# Arduino Nano ESP32 (45 x 18 mm, ~5 mm thick without headers) stands upright
+# in the grip, USB-C end down; the port opens through the bottom of the base.
+# A pocket in the base holds its USB end; tape or hot-glue the top in place.
+# The Pololu LSM6DS33 IMU (23 x 13 mm) sits in the slide, wired with 4 wires.
+BOARD_SIZE = (45.0, 18.0, 5.0)    # length, width, thickness
+BOARD_X = 0.0                     # front-back position of the board's centre
+BOARD_FLOOR = 1.5                 # plastic under the board's USB end
+USB_HOLE = (7.5, 13.5)            # opening for the plug (front-back, side-to-side)
 # NeoPixel stick (51.1 x 10.2 x 3.2 mm) on top of the slide between the wings,
 # under a translucent window printed in clear/natural PETG.
 LED_WINDOW_X = (62.0, 114.0)
@@ -101,7 +104,7 @@ LED_WINDOW_W = 11.0
 # 12 mm tactile buttons: reload = the pill on top, infuse and recenter are
 # round caps on the left side where your thumb rests.
 INFUSE_POS = (30.0, 14.0)         # on the slide's left side
-RECENTER_POS = (3.0, -22.0)       # on the grip's left side
+RECENTER_POS = (3.0, -17.5)       # on the grip's left side, above the Nano
 SIDE_BUTTON_D = 10.0
 SIDE_BUTTON_PROUD = 1.5           # how far the round caps stick out
 
@@ -1376,17 +1379,31 @@ def hollow_frame_and_grip(comp):
     cut_top_openings(comp, frame)
     cut_side_hole(comp, [frame, panel], RECENTER_POS, P_GRIP_W / 2.0, 'Recenter hole')
 
-    # USB-C port on the grip's right side (-Z), with a pocket for the plug
-    bx, by = BOARD_CENTER
-    zr = -P_GRIP_W / 2.0
-    for name, w, h, depth in (('USB-C recess', USB_RECESS[0], USB_RECESS[1], USB_RECESS[2]),
-                              ('USB-C hole', USB_HOLE[0], USB_HOLE[1], 8.0)):
-        try:
-            sk = side_sketch(comp, name, [stadium(bx, by, w, h)], plane=xy_plane(comp, zr))
-            extrude_sym(comp, pick_profile(sk), 2.0 * depth, CUT,
-                        participants=[body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')])
-        except Exception:
-            _skipped.append('Frame & Grip: {} skipped'.format(name))
+    # Nano ESP32: pocket in the base for its USB end, a wider space above it
+    # for the wires on its pins, and the USB-C port through the bottom
+    _, bw, bt = BOARD_SIZE
+    y_board = GRIP_BASE_Y + BOARD_FLOOR
+    try:
+        tools = [box_tool(comp, 'Board pocket', BOARD_X - bt / 2.0 - 0.5, BOARD_X + bt / 2.0 + 0.5,
+                          y_board, y_board + 4.0, -bw / 2.0 - 0.3, bw / 2.0 + 0.3),
+                 box_tool(comp, 'Board wiring space', BOARD_X - 7.0, BOARD_X + 7.0,
+                          y_board + 4.0, GRIP_CAVITY_BOTTOM + 1.0, -bw / 2.0 - 1.0, bw / 2.0 + 1.0)]
+        combine_cut(comp, body_named(comp, 'Grip panel'), tools, keep=True)
+        combine_cut(comp, body_named(comp, 'Frame & Grip'),
+                    [body_named(comp, 'Board pocket'), body_named(comp, 'Board wiring space')])
+    except Exception:
+        _skipped.append('Frame & Grip: Nano pocket skipped')
+    try:
+        pl = offset_plane(comp, comp.xZConstructionPlane, (GRIP_BASE_Y + y_board) / 2.0, 'y',
+                          (GRIP_BASE_Y + y_board) / 2.0)
+        sk = comp.sketches.add(pl)
+        sk.name = 'USB-C port'
+        yp = (GRIP_BASE_Y + y_board) / 2.0
+        draw_loops(sk, [stadium(BOARD_X, 0.0, USB_HOLE[0], USB_HOLE[1])], lambda p: (p[0], yp, p[1]))
+        extrude_sym(comp, pick_profile(sk), BOARD_FLOOR + 4.0, CUT,
+                    participants=[body_named(comp, 'Frame & Grip'), body_named(comp, 'Grip panel')])
+    except Exception:
+        _skipped.append('Frame & Grip: USB-C port skipped')
 
 
 def split_grip(comp):
