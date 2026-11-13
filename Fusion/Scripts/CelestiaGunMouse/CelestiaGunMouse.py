@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v23: longer, slimmer grip sized to hand measurements'
+SCRIPT_VERSION = 'v24: smooth grip-to-base blend, helper sketches hidden'
 
 import adsk.core
 import adsk.fusion
@@ -1552,11 +1552,24 @@ def add_oval_base(comp):
                                        sk_point(sk, cx + BASE_LENGTH / 2.0, y, 0.0),
                                        sk_point(sk, cx, y, BASE_WIDTH / 2.0))
     lofts = comp.features.loftFeatures
-    inp = lofts.createInput(NEW)
-    inp.loftSections.add(section)
-    inp.loftSections.add(pick_profile(sk))
-    inp.isSolid = True
-    base = lofts.add(inp).bodies.item(0)
+
+    def loft(smooth):
+        inp = lofts.createInput(NEW)
+        top = inp.loftSections.add(section)
+        inp.loftSections.add(pick_profile(sk))
+        inp.isSolid = True
+        if smooth:
+            # Leave the grip's sides at the same angle they arrive at, so the
+            # base flows out of the grip instead of starting at a crease.
+            top.setTangentEndCondition(adsk.core.ValueInput.createByReal(1.0))
+        return lofts.add(inp)
+
+    try:
+        feat = loft(True)
+    except Exception:
+        _skipped.append('Smooth grip-to-base blend failed, used a plain one (small crease at the joint)')
+        feat = loft(False)
+    base = feat.bodies.item(0)
     base.name = 'Base'
     combine_join(comp, body_named(comp, 'Grip'), [base])
     grip = body_named(comp, 'Grip')
@@ -1785,6 +1798,17 @@ COMPONENT_COLORS = {
 }
 
 
+def hide_helpers(design):
+    """Turn off sketches and construction planes so only the parts show."""
+    try:
+        for comp in design.allComponents:
+            for coll in (comp.sketches, comp.constructionPlanes):
+                for i in range(coll.count):
+                    coll.item(i).isLightBulbOn = False
+    except Exception:
+        _skipped.append('Could not hide the helper sketches (hide the Sketches folder by hand)')
+
+
 def apply_colors(app, design):
     try:
         base = None
@@ -1857,6 +1881,7 @@ def run(context):
                 _skipped.append('{} FAILED:\n{}'.format(label, traceback.format_exc(limit=2)))
 
         apply_colors(app, design)
+        hide_helpers(design)
         app.activeViewport.fit()
 
         msg = 'CYBER Celestia CGM ({}) built: {} parts.'.format(SCRIPT_VERSION, len(comps))
