@@ -159,9 +159,9 @@ for (x0, x1, y0, y1) in (cgm.TRIGGER_SWITCH, cgm.ADS_SWITCH):
     draw(ax, [rect(x0, y0, x1, y1)], C['Switch (reference)'], 3.7)
 for pivot in (cgm.TRIGGER_PIVOT, cgm.ADS_PIVOT):
     draw(ax, [[('circle', pivot, cgm.PIVOT_PIN_R)]], (255, 255, 255), 3.8)
-for host, posts in cgm.SCREW_POSTS.items():
+for host, posts in cgm.active_posts().items():
     for pos in posts:
-        draw(ax, [[('circle', pos, cgm.POST_R)], [('circle', pos, cgm.SCREW_CLEAR_R)]], (180, 180, 190), 7.5)
+        draw(ax, [[('circle', pos, cgm.active_post_r())], [('circle', pos, cgm.SCREW_CLEAR_R)]], (180, 180, 190), 7.5)
 ring, tab = cgm.eyelet_loops()
 draw(ax, [tab], C['Frame & Grip'], 3)
 draw(ax, ring, C['Frame & Grip'], 3)

@@ -37,7 +37,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v15: hollow inside for the electronics'
+SCRIPT_VERSION = 'v16: shell joined with your 4 nylon standoffs'
 
 import adsk.core
 import adsk.fusion
@@ -115,8 +115,25 @@ TRIGGER_SWITCH = (19.0, 29.0, -19.0, -13.0)   # x0, x1, y0, y1 of the switch bod
 ADS_SWITCH = (18.0, 28.0, -34.0, -28.0)
 SWITCH_HALF_LEN = 10.0            # half its 20 mm length (it lies across the grip)
 
-# Left/right split and M3 screws. Screws go in from the RIGHT side (heads
-# hidden there) into heat-set inserts in the LEFT half.
+# Left/right split. How the halves are held together:
+#   'standoff' - your 4 M3 nylon standoffs (13 mm body, 6 mm male thread, M/F)
+#                with their nuts. Each standoff sits hidden in a hex pocket in
+#                the LEFT half; its thread pokes into the RIGHT half, where the
+#                nut goes on through a hole for a 5.5 mm nut driver. Glue each
+#                colour piece to its neighbour on the same side first.
+#   'screw'    - 6 M3 screws from the RIGHT side into heat-set inserts.
+FASTENER = 'standoff'
+STANDOFF_POSTS = {
+    'Slide': [(120.0, 5.5), (14.0, 5.5)],
+    'Frame & Grip': [(-16.0, -50.0)],
+    'Grip panel': [(12.0, -40.0)],
+}
+STANDOFF_POST_R = 5.5
+STANDOFF_LEN = 13.0                   # hex body length
+STANDOFF_HEX_AF = 5.0                 # across the flats of the hex body
+STUD_LEN = 6.0                        # male thread length
+NUT_T = 2.4                           # M3 nut thickness
+NUT_DRIVER_R = 4.0                    # hole for a 5.5 mm nut driver
 SCREW_POSTS = {
     'Slide': [(120.0, 4.0), (120.0, 22.0), (14.0, 4.0)],
     'Frame & Grip': [(72.0, -3.5), (-16.0, -50.0)],
@@ -1004,7 +1021,7 @@ def build_slide(root):
     add_posts(comp, 'Slide')
     halves = split_left_right(comp, 'Slide')
     if halves:
-        screw_holes(comp, 'Slide', *halves)
+        fastener_holes(comp, 'Slide', *halves)
     return comp
 
 
@@ -1017,15 +1034,56 @@ def wall_z(host, pos):
     return P_GRIP_W / 2.0, GRIP_CAVITY_HALF_W
 
 
+def active_posts():
+    """Fastener positions for the chosen FASTENER."""
+    return STANDOFF_POSTS if FASTENER == 'standoff' else SCREW_POSTS
+
+
+def active_post_r():
+    return STANDOFF_POST_R if FASTENER == 'standoff' else POST_R
+
+
 def add_posts(comp, host):
-    """Screw posts spanning the hollow from wall to wall, joined to host."""
+    """Fastener posts spanning the hollow from wall to wall, joined to host."""
     tools = []
-    for i, pos in enumerate(SCREW_POSTS[host]):
+    for i, pos in enumerate(active_posts().get(host, [])):
         _, inner = wall_z(host, pos)
-        sk = side_sketch(comp, '{} screw post {}'.format(host, i + 1), [[('circle', pos, POST_R)]])
+        sk = side_sketch(comp, '{} post {}'.format(host, i + 1), [[('circle', pos, active_post_r())]])
         tools.append(extrude_sym(comp, pick_profile(sk), 2.0 * (inner + 0.8), NEW,
                                  name='Screw post').bodies.item(0))
     combine_join(comp, body_named(comp, host), tools)
+
+
+def fastener_holes(comp, host, left, right):
+    if FASTENER == 'standoff':
+        standoff_holes(comp, host)
+    else:
+        screw_holes(comp, host, left, right)
+
+
+def standoff_holes(comp, host):
+    """Hex pocket for the standoff body in the left half; a hole for its
+    thread and a nut-driver hole in the right half (the nut bears on the
+    bottom of that hole and pulls the halves together)."""
+    r_hex = (STANDOFF_HEX_AF + 0.2) / math.sqrt(3.0)
+    nut_seat = STUD_LEN - NUT_T - 0.2           # depth of the plastic under the nut
+    for i, pos in enumerate(active_posts().get(host, [])):
+        outer, _ = wall_z(host, pos)
+        hexagon = polygon([(pos[0] + r_hex * math.cos(math.radians(60 * k)),
+                            pos[1] + r_hex * math.sin(math.radians(60 * k))) for k in range(6)])
+        try:
+            sk = side_sketch(comp, '{} standoff pocket {}'.format(host, i + 1), [hexagon],
+                             plane=xy_plane(comp, STANDOFF_LEN / 2.0))
+            extrude_sym(comp, pick_profile(sk), STANDOFF_LEN, CUT, participants=[body_named(comp, host + ' L')])
+            sk = side_sketch(comp, '{} stud hole {}'.format(host, i + 1), [[('circle', pos, SCREW_CLEAR_R)]],
+                             plane=xy_plane(comp, -(outer + 1.0) / 2.0))
+            extrude_sym(comp, pick_profile(sk), outer + 1.0, CUT, participants=[body_named(comp, host + ' R')])
+            z_far, z_near = -(outer + 1.0), -nut_seat
+            sk = side_sketch(comp, '{} nut hole {}'.format(host, i + 1), [[('circle', pos, NUT_DRIVER_R)]],
+                             plane=xy_plane(comp, (z_far + z_near) / 2.0))
+            extrude_sym(comp, pick_profile(sk), z_near - z_far, CUT, participants=[body_named(comp, host + ' R')])
+        except Exception:
+            _skipped.append('{}: standoff {} holes skipped'.format(host, i + 1))
 
 
 def split_left_right(comp, name):
@@ -1054,7 +1112,7 @@ def split_left_right(comp, name):
 def screw_holes(comp, host, left, right):
     """Insert holes in the left half; clearance holes with a recess for the
     screw head in the right half (screws go in from the right)."""
-    for i, pos in enumerate(SCREW_POSTS[host]):
+    for i, pos in enumerate(SCREW_POSTS.get(host, [])):
         outer, _ = wall_z(host, pos)
         try:
             sk = side_sketch(comp, '{} insert {}'.format(host, i + 1), [[('circle', pos, INSERT_R)]],
@@ -1240,7 +1298,7 @@ def build_frame(root):
         add_posts(comp, host)
         halves = split_left_right(comp, host)
         if halves:
-            screw_holes(comp, host, *halves)
+            fastener_holes(comp, host, *halves)
     return comp
 
 
