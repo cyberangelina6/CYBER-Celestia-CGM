@@ -38,7 +38,7 @@ import math
 import traceback
 
 # Shown in the pop-up at the end of a run, so you can tell which version ran.
-SCRIPT_VERSION = 'v13: solid light-pink frame, hollow readout pocket only'
+SCRIPT_VERSION = 'v14: fixed readout + grooves cutting the whole side'
 
 import adsk.core
 import adsk.fusion
@@ -782,6 +782,21 @@ def side_sketch(comp, name, loops, plane=None):
     return sk
 
 
+def face_sketch(comp, face):
+    """Sketch on a body face WITHOUT copying the face's outline into it.
+    (A plain sketches.add(face) projects the face's edges, and the biggest
+    profile is then the whole face, so a cut would remove the whole side.)"""
+    try:
+        return comp.sketches.addWithoutEdges(face)
+    except Exception:
+        sk = comp.sketches.add(face)
+        for i in range(sk.sketchCurves.count - 1, -1, -1):   # drop projected edges
+            c = sk.sketchCurves.item(i)
+            if c.isReference:
+                c.deleteMe()
+        return sk
+
+
 def front_sketch(comp, name, loops, x):
     """Sketch front-view loops (u = across, v = height) on a plane at x."""
     sk = comp.sketches.add(x_plane(comp, x))
@@ -970,7 +985,7 @@ def build_slide(root):
         if face is None:
             _skipped.append('Slide: {} grooves skipped (side face not found)'.format(label))
             continue
-        sk = comp.sketches.add(face)
+        sk = face_sketch(comp, face)
         sk.name = 'Grooves ({})'.format(label)
         draw_loops(sk, serration_outlines(), lambda p, s=side: (p[0], p[1], s * slide_half_width(p[1])))
         try:
@@ -1166,7 +1181,7 @@ def build_frame(root):
     if band is None:
         _skipped.append('Frame: readout window skipped (side face not found)')
     else:
-        sk = comp.sketches.add(band)
+        sk = face_sketch(comp, band)
         sk.name = 'Readout window'
         draw_loops(sk, [readout_outline()], lambda p: (p[0], p[1], FRAME_W / 2.0))
         extrude_sym(comp, pick_profile(sk), 'readout_depth * 2', CUT, participants=[frame])
